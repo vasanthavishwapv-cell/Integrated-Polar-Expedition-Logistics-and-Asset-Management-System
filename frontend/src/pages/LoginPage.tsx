@@ -152,10 +152,6 @@ export default function LoginPage() {
               )}
             </button>
           </form>
-
-          <p className="mt-6 text-center text-xs text-text-muted">
-            <a href="/" className="hover:text-accent-primary">← Back to project overview</a>
-          </p>
         </div>
       </div>
     </div>

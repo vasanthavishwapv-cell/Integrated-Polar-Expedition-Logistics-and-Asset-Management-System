@@ -72,8 +72,8 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public */}
-        <Route path="/" element={<LandingPage />} />
+        {/* Public — Root goes straight to login */}
+        <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<RedirectIfAuth><LoginPage /></RedirectIfAuth>} />
 
         {/* Protected — inside AppLayout */}
