@@ -61,7 +61,8 @@ app.use(`${v1}/personnel`, personnelRoutes);
 app.use(`${v1}/assets`, assetRoutes);
 app.use(`${v1}/incidents`, incidentRoutes);
 app.use(`${v1}/alerts`, alertRoutes);
-app.use(`${v1}`, dashboardRoutes); // /dashboard/summary, /dashboard/analytics, /stations
+app.use(`${v1}/dashboard`, dashboardRoutes);
+app.use(`${v1}`, dashboardRoutes); // /summary, /analytics, /stations
 
 // ── Error Handlers ────────────────────────────────────────────────────────
 app.use(notFoundHandler);

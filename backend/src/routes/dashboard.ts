@@ -7,9 +7,11 @@ import { stationSchema } from '../validators/schemas';
 const router = Router();
 router.use(authenticate);
 
-// Dashboard endpoints
+// Dashboard endpoints (supports both /summary and /dashboard/summary)
 router.get('/summary', ctrl.getDashboardSummary);
+router.get('/dashboard/summary', ctrl.getDashboardSummary);
 router.get('/analytics', ctrl.getDashboardAnalytics);
+router.get('/dashboard/analytics', ctrl.getDashboardAnalytics);
 
 // Station CRUD
 router.get('/stations', ctrl.getStations);
