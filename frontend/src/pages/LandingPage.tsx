@@ -16,19 +16,19 @@ const FEATURES = [
 ];
 
 const DEMO_STATS = [
-  { label: 'Demo Stations', value: '3', sublabel: 'Maitri, Dakshin Gangotri, Bharati' },
-  { label: 'Seed Expeditions', value: '6', sublabel: 'Mix of active, planned, and completed' },
-  { label: 'Demo Personnel', value: '15', sublabel: 'Across all 3 stations' },
-  { label: 'Seeded Alerts', value: '10', sublabel: 'Open alerts with explanations' },
+  { label: 'Polar Stations', value: '3', sublabel: 'Maitri, Dakshin Gangotri, Bharati' },
+  { label: 'Field Expeditions', value: '6', sublabel: 'Active, planned, and completed' },
+  { label: 'Station Personnel', value: '15', sublabel: 'Across all 3 polar bases' },
+  { label: 'Monitored Alerts', value: '10', sublabel: 'Active alerts with rule explanations' },
 ];
 
 const ROLES = [
-  { name: 'System Admin', email: 'admin@polaris.dev' },
-  { name: 'Expedition Coord.', email: 'coordinator@polaris.dev' },
-  { name: 'Logistics Officer', email: 'logistics@polaris.dev' },
-  { name: 'Inventory Manager', email: 'inventory@polaris.dev' },
-  { name: 'Emergency Coord.', email: 'emergency@polaris.dev' },
-  { name: 'Station Ops', email: 'ops@polaris.dev' },
+  { name: 'System Admin (Vasantha)', email: 'vasanthavishwa@polaris.com' },
+  { name: 'Expedition Coord.', email: 'coordinator@polaris.com' },
+  { name: 'Logistics Officer', email: 'logistics@polaris.com' },
+  { name: 'Inventory Manager', email: 'inventory@polaris.com' },
+  { name: 'Emergency Coord.', email: 'emergency@polaris.com' },
+  { name: 'Station Ops', email: 'ops@polaris.com' },
 ];
 
 export default function LandingPage() {

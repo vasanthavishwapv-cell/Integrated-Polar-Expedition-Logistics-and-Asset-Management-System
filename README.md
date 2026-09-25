@@ -109,15 +109,15 @@ Monitors 7 polar risk vectors with rule-based deduplication and alert lifecycle 
 
 The system enforces strict role-based separation of concerns across 7 predefined accounts:
 
-| Role | Demo Email | Password | Primary Clearance |
+| Role | Account Email | Password | Primary Clearance |
 |---|---|---|---|
-| **Admin** | `admin@polaris.dev` | `Polaris@2026` | Full system governance, user provisioning & station settings |
-| **Expedition Coordinator** | `coordinator@polaris.dev` | `Polaris@2026` | Field route dispatch, traverse missions & crew safety |
-| **Logistics Officer** | `logistics@polaris.dev` | `Polaris@2026` | Shipments, cargo manifests & ice-edge receipt |
-| **Inventory Manager** | `inventory@polaris.dev` | `Polaris@2026` | Fuel reserves, rations, medical stock & audit logs |
-| **Personnel Officer** | `personnel@polaris.dev` | `Polaris@2026` | Crew rosters, polar medical clearances & winter-over berths |
-| **Emergency Coordinator** | `emergency@polaris.dev` | `Polaris@2026` | SOS distress response, SAR missions & incident SLA tracking |
-| **Operations Viewer** | `ops@polaris.dev` | `Polaris@2026` | Read-only situational awareness & station telemetry |
+| **Admin (Lead)** | `vasanthavishwa@polaris.com` | `Polaris@2026` | Full platform governance, user provisioning & station settings |
+| **Expedition Coordinator** | `coordinator@polaris.com` | `Polaris@2026` | Field route dispatch, traverse missions & crew safety |
+| **Logistics Officer** | `logistics@polaris.com` | `Polaris@2026` | Shipments, cargo manifests & ice-edge receipt |
+| **Inventory Manager** | `inventory@polaris.com` | `Polaris@2026` | Fuel reserves, rations, medical stock & audit logs |
+| **Personnel Officer** | `personnel@polaris.com` | `Polaris@2026` | Crew rosters, polar medical clearances & winter-over berths |
+| **Emergency Coordinator** | `emergency@polaris.com` | `Polaris@2026` | SOS distress response, SAR missions & incident SLA tracking |
+| **Operations Viewer** | `ops@polaris.com` | `Polaris@2026` | Read-only situational awareness & station telemetry |
 
 ---
 
@@ -165,7 +165,7 @@ POLARIS is pre-configured with root [`vercel.json`](file:///d:/Projects/Integrat
 Follow this script during hackathon evaluations to showcase the complete platform in 5 minutes:
 
 ### Minute 1: Command Dashboard & Situational Awareness
-- Login as `admin@polaris.dev` (Password: `Polaris@2026`).
+- Login as `vasanthavishwa@polaris.com` (Password: `Polaris@2026`).
 - Point out the Polar Station Selector (Maitri, Bharati, Dakshin Gangotri).
 - Highlight the **Live Fuel Reserve** KPI, **Active Expeditions**, and the **Critical Alerts Banner**.
 - Notice the **Simulated Data** indicator acknowledging non-live demonstration sensors.

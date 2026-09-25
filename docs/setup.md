@@ -107,13 +107,13 @@ The database comes pre-populated with accounts for every operational polar role.
 
 | Role | Email | Password | Primary Duties |
 |---|---|---|---|
-| **Administrator** | `admin@polaris.dev` | `Polaris@2026` | Full platform administration & user governance |
-| **Expedition Coordinator** | `coordinator@polaris.dev` | `Polaris@2026` | Field route planning, traverse dispatch & crew safety |
-| **Logistics Officer** | `logistics@polaris.dev` | `Polaris@2026` | Vessel manifests, container tracking & cargo receipt |
-| **Inventory Manager** | `inventory@polaris.dev` | `Polaris@2026` | Safety stock monitoring, fuel audits & warehouse ledger |
-| **Personnel Officer** | `personnel@polaris.dev` | `Polaris@2026` | Station occupancy, crew rosters & medical certs |
-| **Emergency Coordinator** | `emergency@polaris.dev` | `Polaris@2026` | Distress alerts, SAR dispatch & incident SLA tracking |
-| **Operations Viewer** | `ops@polaris.dev` | `Polaris@2026` | Read-only situational awareness & station telemetry |
+| **Administrator (Lead)** | `vasanthavishwa@polaris.com` | `Polaris@2026` | Full platform administration & user governance |
+| **Expedition Coordinator** | `coordinator@polaris.com` | `Polaris@2026` | Field route planning, traverse dispatch & crew safety |
+| **Logistics Officer** | `logistics@polaris.com` | `Polaris@2026` | Vessel manifests, container tracking & cargo receipt |
+| **Inventory Manager** | `inventory@polaris.com` | `Polaris@2026` | Safety stock monitoring, fuel audits & warehouse ledger |
+| **Personnel Officer** | `personnel@polaris.com` | `Polaris@2026` | Station occupancy, crew rosters & medical certs |
+| **Emergency Coordinator** | `emergency@polaris.com` | `Polaris@2026` | Distress alerts, SAR dispatch & incident SLA tracking |
+| **Operations Viewer** | `ops@polaris.com` | `Polaris@2026` | Read-only situational awareness & station telemetry |
 
 ---
 

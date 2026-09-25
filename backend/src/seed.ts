@@ -4,13 +4,13 @@
  * Resets DB to a reproducible demo state (targets from §12 of the spec)
  *
  * Demo credentials (one per role):
- *   admin@polaris.dev          / Polaris@2026
- *   coordinator@polaris.dev    / Polaris@2026
- *   logistics@polaris.dev      / Polaris@2026
- *   inventory@polaris.dev      / Polaris@2026
- *   personnel@polaris.dev      / Polaris@2026
- *   emergency@polaris.dev      / Polaris@2026
- *   ops@polaris.dev            / Polaris@2026
+ *   vasanthavishwa@polaris.com / Polaris@2026
+ *   coordinator@polaris.com    / Polaris@2026
+ *   logistics@polaris.com      / Polaris@2026
+ *   inventory@polaris.com      / Polaris@2026
+ *   personnel@polaris.com      / Polaris@2026
+ *   emergency@polaris.com      / Polaris@2026
+ *   ops@polaris.com            / Polaris@2026
  */
 import dotenv from 'dotenv';
 dotenv.config();
@@ -55,13 +55,13 @@ async function seed() {
 
   // ── Users ─────────────────────────────────────────────────────────────
   const users = await User.insertMany([
-    { name: 'Dr. Admin Singh', email: 'admin@polaris.dev', password: hashed, role: 'admin', station: stations[0]._id, isActive: true },
-    { name: 'Capt. Arjun Mehta', email: 'coordinator@polaris.dev', password: hashed, role: 'expedition_coordinator', station: stations[0]._id, isActive: true },
-    { name: 'Lt. Priya Nair', email: 'logistics@polaris.dev', password: hashed, role: 'logistics_officer', station: stations[0]._id, isActive: true },
-    { name: 'Dr. Kavya Reddy', email: 'inventory@polaris.dev', password: hashed, role: 'inventory_manager', station: stations[1]._id, isActive: true },
-    { name: 'Maj. Suresh Kumar', email: 'personnel@polaris.dev', password: hashed, role: 'personnel_coordinator', station: stations[2]._id, isActive: true },
-    { name: 'Dr. Anita Sharma', email: 'emergency@polaris.dev', password: hashed, role: 'emergency_coordinator', station: stations[0]._id, isActive: true },
-    { name: 'Tech. Rajan Pillai', email: 'ops@polaris.dev', password: hashed, role: 'station_ops', station: stations[0]._id, isActive: true },
+    { name: 'Vasantha Vishwa', email: 'vasanthavishwa@polaris.com', password: hashed, role: 'admin', station: stations[0]._id, isActive: true },
+    { name: 'Capt. Arjun Mehta', email: 'coordinator@polaris.com', password: hashed, role: 'expedition_coordinator', station: stations[0]._id, isActive: true },
+    { name: 'Lt. Priya Nair', email: 'logistics@polaris.com', password: hashed, role: 'logistics_officer', station: stations[0]._id, isActive: true },
+    { name: 'Dr. Kavya Reddy', email: 'inventory@polaris.com', password: hashed, role: 'inventory_manager', station: stations[1]._id, isActive: true },
+    { name: 'Maj. Suresh Kumar', email: 'personnel@polaris.com', password: hashed, role: 'personnel_coordinator', station: stations[2]._id, isActive: true },
+    { name: 'Dr. Anita Sharma', email: 'emergency@polaris.com', password: hashed, role: 'emergency_coordinator', station: stations[0]._id, isActive: true },
+    { name: 'Tech. Rajan Pillai', email: 'ops@polaris.com', password: hashed, role: 'station_ops', station: stations[0]._id, isActive: true },
   ]);
   console.log(`Created ${users.length} users`);
   const [adminUser, coordUser, logisticsUser] = users;
@@ -311,13 +311,13 @@ async function seed() {
 
   console.log('\n✅ POLARIS database seeded successfully!');
   console.log('\nDemo credentials (all passwords: Polaris@2026):');
-  console.log('  admin@polaris.dev          → System Administrator');
-  console.log('  coordinator@polaris.dev    → Expedition Coordinator');
-  console.log('  logistics@polaris.dev      → Logistics Officer');
-  console.log('  inventory@polaris.dev      → Inventory Manager');
-  console.log('  personnel@polaris.dev      → Personnel Coordinator');
-  console.log('  emergency@polaris.dev      → Emergency Coordinator');
-  console.log('  ops@polaris.dev            → Station Operations User');
+  console.log('  vasanthavishwa@polaris.com → System Administrator (Vasantha Vishwa)');
+  console.log('  coordinator@polaris.com    → Expedition Coordinator');
+  console.log('  logistics@polaris.com      → Logistics Officer');
+  console.log('  inventory@polaris.com      → Inventory Manager');
+  console.log('  personnel@polaris.com      → Personnel Coordinator');
+  console.log('  emergency@polaris.com      → Emergency Coordinator');
+  console.log('  ops@polaris.com            → Station Operations User');
 
   await mongoose.disconnect();
 }

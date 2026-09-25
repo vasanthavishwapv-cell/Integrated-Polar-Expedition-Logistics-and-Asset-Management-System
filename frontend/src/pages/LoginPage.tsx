@@ -13,13 +13,13 @@ const loginSchema = z.object({
 });
 type LoginForm = z.infer<typeof loginSchema>;
 
-const DEMO_ACCOUNTS = [
-  { role: 'System Admin', email: 'admin@polaris.dev' },
-  { role: 'Expedition Coord.', email: 'coordinator@polaris.dev' },
-  { role: 'Logistics Officer', email: 'logistics@polaris.dev' },
-  { role: 'Inventory Manager', email: 'inventory@polaris.dev' },
-  { role: 'Emergency Coord.', email: 'emergency@polaris.dev' },
-  { role: 'Station Ops', email: 'ops@polaris.dev' },
+const POLARIS_ACCOUNTS = [
+  { role: 'System Admin (Vasantha)', email: 'vasanthavishwa@polaris.com' },
+  { role: 'Expedition Coord.', email: 'coordinator@polaris.com' },
+  { role: 'Logistics Officer', email: 'logistics@polaris.com' },
+  { role: 'Inventory Manager', email: 'inventory@polaris.com' },
+  { role: 'Emergency Coord.', email: 'emergency@polaris.com' },
+  { role: 'Station Ops', email: 'ops@polaris.com' },
 ];
 
 export default function LoginPage() {
@@ -71,11 +71,11 @@ export default function LoginPage() {
             Replacing fragmented spreadsheets and radio logs with a single integrated platform for expedition planning, cargo tracking, and emergency coordination.
           </p>
         </div>
-        {/* Demo accounts quick-select */}
+        {/* Polar Station Accounts quick-select */}
         <div className="relative">
-          <p className="text-xs text-text-muted uppercase tracking-wider mb-3">Demo Accounts (password: Polaris@2026)</p>
+          <p className="text-xs text-text-muted uppercase tracking-wider mb-3">Polaris Operational Directory</p>
           <div className="grid grid-cols-2 gap-2">
-            {DEMO_ACCOUNTS.map(({ role, email }) => (
+            {POLARIS_ACCOUNTS.map(({ role, email }) => (
               <button
                 key={email}
                 onClick={() => {
@@ -89,7 +89,7 @@ export default function LoginPage() {
               </button>
             ))}
           </div>
-          <p className="text-[10px] text-text-muted mt-2 italic">Demo Data badge will appear next to simulated fields.</p>
+          <p className="text-[10px] text-text-muted mt-2 italic">Standard passkey: Polaris@2026</p>
         </div>
       </div>
 
@@ -116,7 +116,7 @@ export default function LoginPage() {
                 autoComplete="email"
                 {...register('email')}
                 className="input-field"
-                placeholder="your@email.com"
+                placeholder="vasanthavishwa@polaris.com"
               />
               {errors.email && <p className="mt-1 text-xs text-status-danger">{errors.email.message}</p>}
             </div>
