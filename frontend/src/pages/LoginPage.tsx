@@ -13,22 +13,13 @@ const loginSchema = z.object({
 });
 type LoginForm = z.infer<typeof loginSchema>;
 
-const POLARIS_ACCOUNTS = [
-  { role: 'System Admin (Vasantha)', email: 'vasanthavishwa@polaris.com' },
-  { role: 'Expedition Coord.', email: 'coordinator@polaris.com' },
-  { role: 'Logistics Officer', email: 'logistics@polaris.com' },
-  { role: 'Inventory Manager', email: 'inventory@polaris.com' },
-  { role: 'Emergency Coord.', email: 'emergency@polaris.com' },
-  { role: 'Station Ops', email: 'ops@polaris.com' },
-];
-
 export default function LoginPage() {
   const [showPwd, setShowPwd] = useState(false);
   const [serverError, setServerError] = useState('');
   const { setAuth } = useAuthStore();
   const navigate = useNavigate();
 
-  const { register, handleSubmit, setValue, formState: { errors, isSubmitting } } = useForm<LoginForm>({
+  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
   });
 
@@ -71,25 +62,20 @@ export default function LoginPage() {
             Replacing fragmented spreadsheets and radio logs with a single integrated platform for expedition planning, cargo tracking, and emergency coordination.
           </p>
         </div>
-        {/* Polar Station Accounts quick-select */}
-        <div className="relative">
-          <p className="text-xs text-text-muted uppercase tracking-wider mb-3">Polaris Operational Directory</p>
-          <div className="grid grid-cols-2 gap-2">
-            {POLARIS_ACCOUNTS.map(({ role, email }) => (
-              <button
-                key={email}
-                onClick={() => {
-                  setValue('email', email);
-                  setValue('password', 'Polaris@2026');
-                }}
-                className="text-left p-2.5 rounded-lg bg-white/5 hover:bg-white/10 transition-colors border border-[rgba(148,163,184,0.1)]"
-              >
-                <div className="text-xs font-medium text-text-primary">{role}</div>
-                <div className="text-[10px] text-text-muted font-mono truncate">{email}</div>
-              </button>
-            ))}
+        {/* Security & Uplink Status */}
+        <div className="relative text-xs text-text-muted border-t border-[rgba(148,163,184,0.1)] pt-6 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-text-muted">Security Architecture</span>
+            <span className="font-mono text-status-success text-[11px]">AES-256 TLS v1.3</span>
           </div>
-          <p className="text-[10px] text-text-muted mt-2 italic">Standard passkey: Polaris@2026</p>
+          <div className="flex items-center justify-between">
+            <span className="text-text-muted">Station Gateway</span>
+            <span className="font-mono text-accent-primary text-[11px]">Satellite Mesh Active</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-text-muted">Access Control</span>
+            <span className="font-mono text-text-primary text-[11px]">Role-Based Multi-Tier</span>
+          </div>
         </div>
       </div>
 
