@@ -1,11 +1,25 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { config } from '../config';
-import { User, IUser, UserRole } from '../models/User';
+import { prisma } from '../config/database';
 import { sendError } from '../utils/response';
+import { UserRole } from '@prisma/client';
 
-export interface AuthRequest extends Request {
-  user?: IUser;
+export interface AuthRequest<
+  P = Record<string, string>,
+  ResBody = any,
+  ReqBody = any,
+  ReqQuery = Record<string, any>
+> extends Request<P, ResBody, ReqBody, ReqQuery> {
+  user?: {
+    id: string;
+    name: string;
+    email: string;
+    role: UserRole;
+    stationId: string | null;
+    isActive: boolean;
+    refreshTokenVersion: number;
+  };
 }
 
 // ── Authenticate: verify access token ────────────────────────────────────
@@ -27,7 +41,19 @@ export const authenticate = async (
       role: UserRole;
     };
 
-    const user = await User.findById(payload.sub).select('-password');
+    const user = await prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        stationId: true,
+        isActive: true,
+        refreshTokenVersion: true,
+      },
+    });
+
     if (!user || !user.isActive) {
       sendError(res, 'UNAUTHORIZED', 'User not found or inactive', 401);
       return;
@@ -41,8 +67,6 @@ export const authenticate = async (
 };
 
 // ── RBAC permission matrix (single source of truth) ──────────────────────
-// Maps module → roles allowed to perform the action level
-// Levels: 'full' | 'read' | 'limited' | none (absence = denied)
 type PermissionLevel = 'full' | 'read' | 'limited';
 type Module =
   | 'expeditions'
@@ -70,7 +94,7 @@ const PERMISSIONS: Record<Module, Partial<Record<UserRole, PermissionLevel>>> = 
     logistics_officer: 'full',
     inventory_manager: 'read',
     emergency_coordinator: 'read',
-    station_ops: 'limited', // read + receive
+    station_ops: 'limited',
   },
   inventory: {
     admin: 'full',
@@ -78,21 +102,21 @@ const PERMISSIONS: Record<Module, Partial<Record<UserRole, PermissionLevel>>> = 
     logistics_officer: 'read',
     inventory_manager: 'full',
     emergency_coordinator: 'read',
-    station_ops: 'limited', // read + record consumption
+    station_ops: 'limited',
   },
   personnel: {
     admin: 'full',
     expedition_coordinator: 'read',
     personnel_coordinator: 'full',
     emergency_coordinator: 'read',
-    station_ops: 'limited', // read own + station roster
+    station_ops: 'limited',
   },
   assets: {
     admin: 'full',
     expedition_coordinator: 'read',
     logistics_officer: 'read',
     emergency_coordinator: 'read',
-    station_ops: 'limited', // log faults
+    station_ops: 'limited',
   },
   incidents: {
     admin: 'full',
@@ -101,7 +125,7 @@ const PERMISSIONS: Record<Module, Partial<Record<UserRole, PermissionLevel>>> = 
     inventory_manager: 'read',
     personnel_coordinator: 'read',
     emergency_coordinator: 'full',
-    station_ops: 'limited', // create + read
+    station_ops: 'limited',
   },
   alerts: {
     admin: 'full',

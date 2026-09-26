@@ -1,37 +1,35 @@
 import { Response } from 'express';
-import { Expedition } from '../models/Expedition';
-import { Shipment } from '../models/Shipment';
-import { InventoryItem, InventoryTransaction } from '../models/Inventory';
-import { Personnel } from '../models/Personnel';
-import { Asset } from '../models/Asset';
-import { Incident } from '../models/Incident';
-import { Alert, AuditLog } from '../models/Alert';
-import { Station } from '../models/Station';
+import { prisma } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
-import { sendSuccess } from '../utils/response';
+import { sendSuccess, sendError } from '../utils/response';
 
 export const getDashboardSummary = async (_req: AuthRequest, res: Response): Promise<void> => {
   const [
-    totalExpeditions, activeExpeditions, plannedExpeditions,
-    shipmentsInTransit, delayedShipments,
+    totalExpeditions,
+    activeExpeditions,
+    plannedExpeditions,
+    shipmentsInTransit,
+    delayedShipments,
     openInventoryAlerts,
-    operationalAssets, totalAssets,
-    openIncidents, criticalIncidents,
+    operationalAssets,
+    totalAssets,
+    openIncidents,
+    criticalIncidents,
     activePersonnel,
     openAlerts,
   ] = await Promise.all([
-    Expedition.countDocuments(),
-    Expedition.countDocuments({ status: 'active' }),
-    Expedition.countDocuments({ status: 'planned' }),
-    Shipment.countDocuments({ status: 'in_transit' }),
-    Shipment.countDocuments({ status: 'delayed' }),
-    Alert.countDocuments({ type: 'low_stock', status: 'open' }),
-    Asset.countDocuments({ status: 'operational' }),
-    Asset.countDocuments(),
-    Incident.countDocuments({ status: { $nin: ['resolved', 'closed'] } }),
-    Incident.countDocuments({ severity: 'critical', status: { $nin: ['resolved', 'closed'] } }),
-    Personnel.countDocuments({ currentStatus: { $in: ['at_station', 'on_assignment', 'in_transit'] } }),
-    Alert.countDocuments({ status: 'open' }),
+    prisma.expedition.count(),
+    prisma.expedition.count({ where: { status: 'active' } }),
+    prisma.expedition.count({ where: { status: 'planned' } }),
+    prisma.shipment.count({ where: { status: 'in_transit' } }),
+    prisma.shipment.count({ where: { status: 'delayed' } }),
+    prisma.alert.count({ where: { type: 'low_stock', status: 'open' } }),
+    prisma.asset.count({ where: { status: 'operational' } }),
+    prisma.asset.count(),
+    prisma.incident.count({ where: { status: { notIn: ['resolved', 'closed'] } } }),
+    prisma.incident.count({ where: { severity: 'critical', status: { notIn: ['resolved', 'closed'] } } }),
+    prisma.personnel.count({ where: { currentStatus: { in: ['at_station', 'on_assignment', 'in_transit'] } } }),
+    prisma.alert.count({ where: { status: 'open' } }),
   ]);
 
   sendSuccess(res, {
@@ -61,79 +59,75 @@ export const getDashboardAnalytics = async (_req: AuthRequest, res: Response): P
     assetStatusDist,
     recentActivity,
   ] = await Promise.all([
-    // Expedition status distribution
-    Expedition.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
-    // Shipment status distribution
-    Shipment.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
-    // Incident severity distribution
-    Incident.aggregate([
-      { $match: { status: { $nin: ['resolved', 'closed'] } } },
-      { $group: { _id: '$severity', count: { $sum: 1 } } },
-    ]),
-    // Inventory by category (total on-hand)
-    InventoryItem.aggregate([
-      { $group: { _id: '$category', totalOnHand: { $sum: '$onHandQuantity' }, itemCount: { $sum: 1 } } },
-    ]),
-    // Asset status distribution
-    Asset.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
-    // Recent activity (last 20 audit logs)
-    AuditLog.find()
-      .populate('performedBy', 'name role')
-      .sort({ createdAt: -1 })
-      .limit(20),
+    prisma.expedition.groupBy({ by: ['status'], _count: { id: true } }),
+    prisma.shipment.groupBy({ by: ['status'], _count: { id: true } }),
+    prisma.incident.groupBy({
+      by: ['severity'],
+      where: { status: { notIn: ['resolved', 'closed'] } },
+      _count: { id: true },
+    }),
+    prisma.inventoryItem.groupBy({
+      by: ['category'],
+      _count: { id: true },
+      _sum: { onHandQuantity: true },
+    }),
+    prisma.asset.groupBy({ by: ['status'], _count: { id: true } }),
+    prisma.auditLog.findMany({
+      include: { performer: { select: { id: true, name: true, role: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    }),
   ]);
 
-  // 30-day consumption trend
+  // 30-day consumption trend via raw SQL
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  const consumptionTrend = await InventoryTransaction.aggregate([
-    { $match: { type: 'consumption', createdAt: { $gte: thirtyDaysAgo } } },
-    {
-      $group: {
-        _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
-        total: { $sum: { $abs: '$quantity' } },
-      },
-    },
-    { $sort: { _id: 1 } },
-  ]);
+
+  const consumptionTrend = await prisma.$queryRaw<{ day: string; total: number }[]>`
+    SELECT 
+      DATE_FORMAT(created_at, '%Y-%m-%d') as day,
+      SUM(ABS(quantity)) as total
+    FROM inventory_transactions
+    WHERE type = 'consumption' AND created_at >= ${thirtyDaysAgo}
+    GROUP BY day
+    ORDER BY day ASC
+  `;
 
   sendSuccess(res, {
-    expeditionStatusDist,
-    shipmentStatusDist,
-    incidentSeverityDist,
-    inventoryByCategory,
-    assetStatusDist,
-    consumptionTrend,
+    expeditionStatusDist: expeditionStatusDist.map((r) => ({ _id: r.status, count: r._count.id })),
+    shipmentStatusDist: shipmentStatusDist.map((r) => ({ _id: r.status, count: r._count.id })),
+    incidentSeverityDist: incidentSeverityDist.map((r) => ({ _id: r.severity, count: r._count.id })),
+    inventoryByCategory: inventoryByCategory.map((r) => ({
+      _id: r.category,
+      totalOnHand: r._sum.onHandQuantity,
+      itemCount: r._count.id,
+    })),
+    assetStatusDist: assetStatusDist.map((r) => ({ _id: r.status, count: r._count.id })),
+    consumptionTrend: consumptionTrend.map((r) => ({ _id: r.day, total: r.total })),
     recentActivity,
   });
 };
 
 export const getStations = async (_req: AuthRequest, res: Response): Promise<void> => {
-  const stations = await Station.find().sort({ name: 1 });
+  const stations = await prisma.station.findMany({ orderBy: { name: 'asc' } });
   sendSuccess(res, stations);
 };
 
 export const createStation = async (req: AuthRequest, res: Response): Promise<void> => {
-  const station = await Station.create(req.body);
+  const station = await prisma.station.create({ data: req.body });
   sendSuccess(res, station, 201);
 };
 
 export const getStation = async (req: AuthRequest, res: Response): Promise<void> => {
-  const station = await Station.findById(req.params.id);
-  if (!station) { 
-    const { sendError } = await import('../utils/response');
-    sendError(res, 'NOT_FOUND', 'Station not found', 404); 
-    return; 
-  }
+  const station = await prisma.station.findUnique({ where: { id: req.params.id } });
+  if (!station) { sendError(res, 'NOT_FOUND', 'Station not found', 404); return; }
   sendSuccess(res, station);
 };
 
 export const updateStation = async (req: AuthRequest, res: Response): Promise<void> => {
-  const station = await Station.findByIdAndUpdate(req.params.id, req.body, { new: true });
-  if (!station) { 
-    const { sendError } = await import('../utils/response');
-    sendError(res, 'NOT_FOUND', 'Station not found', 404); 
-    return; 
-  }
+  const station = await prisma.station.update({
+    where: { id: req.params.id },
+    data: req.body,
+  });
   sendSuccess(res, station);
 };

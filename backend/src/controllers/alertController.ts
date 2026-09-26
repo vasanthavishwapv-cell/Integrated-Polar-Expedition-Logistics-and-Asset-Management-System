@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { Alert } from '../models/Alert';
+import { prisma } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { sendSuccess, sendError, paginateMeta } from '../utils/response';
 import { runAlertEngine } from '../services/analyticsService';
@@ -7,34 +7,37 @@ import { runAlertEngine } from '../services/analyticsService';
 export const listAlerts = async (req: AuthRequest, res: Response): Promise<void> => {
   const page = Math.max(1, parseInt(req.query.page as string) || 1);
   const limit = Math.min(100, parseInt(req.query.limit as string) || 50);
-  const filter: Record<string, unknown> = {};
-  if (req.query.status) filter.status = req.query.status;
-  if (req.query.severity) filter.severity = req.query.severity;
-  if (req.query.type) filter.type = req.query.type;
+
+  const where: any = {};
+  if (req.query.status) where.status = req.query.status;
+  if (req.query.severity) where.severity = req.query.severity;
+  if (req.query.type) where.type = req.query.type;
 
   const [alerts, total] = await Promise.all([
-    Alert.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
-    Alert.countDocuments(filter),
+    prisma.alert.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    prisma.alert.count({ where }),
   ]);
   sendSuccess(res, alerts, 200, paginateMeta(total, page, limit));
 };
 
 export const acknowledgeAlert = async (req: AuthRequest, res: Response): Promise<void> => {
-  const alert = await Alert.findById(req.params.id);
+  const alert = await prisma.alert.findUnique({ where: { id: req.params.id } });
   if (!alert) { sendError(res, 'NOT_FOUND', 'Alert not found', 404); return; }
   if (alert.status !== 'open') {
     sendError(res, 'CONFLICT', 'Alert is not open', 409);
     return;
   }
 
-  alert.status = 'acknowledged';
-  alert.acknowledgments.push({
-    acknowledgedBy: req.user!._id,
-    acknowledgedAt: new Date(),
-    notes: req.body.notes,
+  const updated = await prisma.alert.update({
+    where: { id: alert.id },
+    data: { status: 'acknowledged' },
   });
-  await alert.save();
-  sendSuccess(res, alert);
+  sendSuccess(res, updated);
 };
 
 export const triggerAlertEngine = async (_req: AuthRequest, res: Response): Promise<void> => {

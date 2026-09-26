@@ -1,22 +1,38 @@
-import mongoose from 'mongoose';
-import { config } from './index';
+import { PrismaClient } from '@prisma/client';
 import logger from '../utils/logger';
 
-let isConnected = false;
+// Global singleton to avoid multiple clients in dev hot-reloading / Vercel serverless
+declare global {
+  // eslint-disable-next-line no-var
+  var __prisma: PrismaClient | undefined;
+}
+
+export const prisma: PrismaClient =
+  global.__prisma ??
+  new PrismaClient({
+    log:
+      process.env.NODE_ENV === 'development'
+        ? [{ emit: 'event', level: 'query' }, { emit: 'event', level: 'error' }]
+        : [{ emit: 'event', level: 'error' }],
+  });
+
+if (process.env.NODE_ENV !== 'production') {
+  global.__prisma = prisma;
+}
 
 export const connectDB = async (): Promise<void> => {
-  if (mongoose.connection.readyState >= 1 || isConnected) {
-    return;
-  }
   try {
-    await mongoose.connect(config.mongoUri);
-    isConnected = true;
-    logger.info('MongoDB connected');
+    await prisma.$connect();
+    logger.info('TiDB (Prisma) connected');
   } catch (err) {
-    logger.error({ err }, 'MongoDB connection failed');
+    logger.error({ err }, 'TiDB connection failed');
     if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
       process.exit(1);
     }
     throw err;
   }
+};
+
+export const disconnectDB = async (): Promise<void> => {
+  await prisma.$disconnect();
 };

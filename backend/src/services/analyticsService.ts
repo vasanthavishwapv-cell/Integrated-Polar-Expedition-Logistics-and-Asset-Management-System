@@ -1,10 +1,4 @@
-import { Types } from 'mongoose';
-import { InventoryTransaction } from '../models/Inventory';
-import { Alert } from '../models/Alert';
-import { Shipment } from '../models/Shipment';
-import { Asset } from '../models/Asset';
-import { Incident } from '../models/Incident';
-import { InventoryItem } from '../models/Inventory';
+import { prisma } from '../config/database';
 import { config } from '../config';
 
 // ── §6.1 Inventory Depletion Forecast ────────────────────────────────────
@@ -37,39 +31,31 @@ export const computeForecast = async (
   const windowStart = new Date();
   windowStart.setDate(windowStart.getDate() - windowDays);
 
-  // Get consumption transactions for the window
-  const transactions = await InventoryTransaction.find({
-    item: itemId,
-    type: 'consumption',
-    createdAt: { $gte: windowStart },
-  }).sort({ createdAt: 1 });
+  // Get consumption transactions for the window via raw SQL (TiDB-compatible)
+  const rows = await prisma.$queryRaw<{ day: string; total: number }[]>`
+    SELECT 
+      DATE_FORMAT(created_at, '%Y-%m-%d') as day,
+      SUM(ABS(quantity)) as total
+    FROM inventory_transactions
+    WHERE item_id = ${itemId}
+      AND type = 'consumption'
+      AND created_at >= ${windowStart}
+    GROUP BY day
+    ORDER BY day ASC
+  `;
 
-  // Build daily consumption map
+  const historicalData = rows.map((r) => ({ date: r.day, consumption: Number(r.total) }));
   const dailyMap: Record<string, number> = {};
-  for (const tx of transactions) {
-    const day = tx.createdAt.toISOString().split('T')[0];
-    dailyMap[day] = (dailyMap[day] || 0) + Math.abs(tx.quantity);
-  }
-
-  const historicalData = Object.entries(dailyMap).map(([date, consumption]) => ({
-    date,
-    consumption,
-  }));
-
-  const daysWithData = Object.keys(dailyMap).length;
+  for (const r of historicalData) dailyMap[r.date] = r.consumption;
+  const daysWithData = historicalData.length;
 
   let confidence: ForecastResult['confidence'];
-  if (daysWithData === 0) {
-    confidence = 'insufficient_data';
-  } else if (daysWithData >= windowDays) {
-    confidence = 'high';
-  } else if (daysWithData >= Math.floor(windowDays / 2)) {
-    confidence = 'medium';
-  } else {
-    confidence = 'low';
-  }
+  if (daysWithData === 0) confidence = 'insufficient_data';
+  else if (daysWithData >= windowDays) confidence = 'high';
+  else if (daysWithData >= Math.floor(windowDays / 2)) confidence = 'medium';
+  else confidence = 'low';
 
-  const totalConsumption = Object.values(dailyMap).reduce((s, v) => s + v, 0);
+  const totalConsumption = historicalData.reduce((s, r) => s + r.consumption, 0);
   const estimatedDailyUsage = daysWithData > 0 ? totalConsumption / windowDays : 0;
 
   let estimatedDaysRemaining: number | null = null;
@@ -95,19 +81,12 @@ export const computeForecast = async (
     historicalData,
     explanation: {
       formula: `estimatedDailyUsage = sum(consumption over last ${windowDays} days) / ${windowDays}; estimatedDaysRemaining = availableQuantity / estimatedDailyUsage`,
-      inputs: {
-        windowDays,
-        daysWithData,
-        totalConsumption,
-        availableQuantity: available,
-        onHandQuantity: onHand,
-        reservedQuantity: reserved,
-      },
+      inputs: { windowDays, daysWithData, totalConsumption, availableQuantity: available, onHandQuantity: onHand, reservedQuantity: reserved },
     },
   };
 };
 
-// ── §6.2 Alert Engine (rule evaluation) ──────────────────────────────────
+// ── §6.2 Alert Engine ─────────────────────────────────────────────────────
 export const runAlertEngine = async (): Promise<void> => {
   await Promise.allSettled([
     checkLowStockAlerts(),
@@ -121,44 +100,46 @@ export const runAlertEngine = async (): Promise<void> => {
 };
 
 const upsertAlert = async (
-  type: string,
+  type: any,
   entityType: string,
   entityId: string,
-  severity: string,
-  reason: string,
-  explanation: { rule: string; inputs: Record<string, unknown> }
+  severity: any,
+  reason: string
 ) => {
-  await (Alert as any).findOneAndUpdate(
-    { type, entityId: new Types.ObjectId(entityId), status: 'open' },
-    { type, severity, entityType, entityId: new Types.ObjectId(entityId), reason, explanation, lastCheckedAt: new Date() },
-    { upsert: true, new: true }
-  );
+  await prisma.alert.upsert({
+    where: { unique_open_alert: { type, entityId, status: 'open' } },
+    create: { type, severity, entityType, entityId, reason, status: 'open' },
+    update: { lastCheckedAt: new Date(), severity, reason },
+  });
 };
 
 const checkLowStockAlerts = async () => {
-  const lowItems = await InventoryItem.find({
-    $expr: { $lt: ['$onHandQuantity', '$minThreshold'] },
-  });
+  const lowItems = await prisma.$queryRaw<{ id: string; name: string; on_hand_quantity: number; min_threshold: number; unit: string }[]>`
+    SELECT id, name, CAST(on_hand_quantity AS DECIMAL(12,2)) as on_hand_quantity, 
+           CAST(min_threshold AS DECIMAL(12,2)) as min_threshold, unit
+    FROM inventory_items
+    WHERE CAST(on_hand_quantity AS DECIMAL(12,2)) < CAST(min_threshold AS DECIMAL(12,2))
+  `;
   for (const item of lowItems) {
     await upsertAlert(
-      'low_stock', 'InventoryItem', item._id.toString(),
-      item.onHandQuantity === 0 ? 'critical' : 'warning',
-      `${item.name} on-hand (${item.onHandQuantity} ${item.unit}) is below minimum threshold (${item.minThreshold} ${item.unit})`,
-      { rule: 'inventory_below_threshold', inputs: { onHand: item.onHandQuantity, threshold: item.minThreshold } }
+      'low_stock', 'InventoryItem', item.id,
+      item.on_hand_quantity === 0 ? 'critical' : 'warning',
+      `${item.name} on-hand (${item.on_hand_quantity} ${item.unit}) is below minimum threshold (${item.min_threshold} ${item.unit})`
     );
   }
 };
 
 const checkDelayedShipments = async () => {
-  const overdue = await Shipment.find({
-    status: { $in: ['in_transit', 'dispatched'] },
-    estimatedArrival: { $lt: new Date() },
+  const overdue = await prisma.shipment.findMany({
+    where: {
+      status: { in: ['in_transit'] },
+      estimatedArrival: { lt: new Date() },
+    },
   });
   for (const s of overdue) {
     await upsertAlert(
-      'shipment_delayed', 'Shipment', s._id.toString(), 'warning',
-      `Shipment ${s.shipmentId} is past estimated arrival (${s.estimatedArrival.toISOString()})`,
-      { rule: 'shipment_past_eta', inputs: { eta: s.estimatedArrival, status: s.status } }
+      'shipment_delayed', 'Shipment', s.id, 'warning',
+      `Shipment ${s.shipmentNumber} is past estimated arrival (${s.estimatedArrival?.toISOString()})`
     );
   }
 };
@@ -167,36 +148,44 @@ const checkMaintenanceDue = async () => {
   const sevenDaysFromNow = new Date();
   sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
 
-  const assets = await Asset.find({
-    status: 'operational',
-    nextMaintenanceDue: { $lte: sevenDaysFromNow },
+  // Find assets where next_service_due (hour meter target) is close
+  // Use lastServiceDate as a proxy for maintenance scheduling
+  const assets = await prisma.asset.findMany({
+    where: {
+      status: 'operational',
+      lastServiceDate: { not: null },
+    },
   });
+
   for (const a of assets) {
-    const daysUntil = a.nextMaintenanceDue
-      ? Math.round((a.nextMaintenanceDue.getTime() - Date.now()) / 86400000)
-      : 0;
-    await upsertAlert(
-      'maintenance_due', 'Asset', a._id.toString(),
-      daysUntil <= 0 ? 'critical' : 'warning',
-      `${a.name} maintenance due ${daysUntil <= 0 ? 'now (overdue)' : `in ${daysUntil} day(s)`}`,
-      { rule: 'maintenance_date_threshold', inputs: { nextDue: a.nextMaintenanceDue, daysUntil } }
-    );
+    if (a.lastServiceDate && a.nextServiceDue) {
+      // Flag if hour meter is within 10 hours of next service
+      const diff = a.nextServiceDue - a.hourMeter;
+      if (diff <= 10) {
+        await upsertAlert(
+          'maintenance_due', 'Asset', a.id,
+          diff <= 0 ? 'critical' : 'warning',
+          `${a.name} maintenance due ${diff <= 0 ? 'now (overdue)' : `in ${diff} operating hours`}`
+        );
+      }
+    }
   }
 };
 
 const checkCriticalIncidentSLA = async () => {
   const slaMs = config.alert.criticalIncidentSlaMinutes * 60 * 1000;
   const cutoff = new Date(Date.now() - slaMs);
-  const criticalUnacked = await Incident.find({
-    severity: 'critical',
-    status: 'reported',
-    reportedTime: { $lt: cutoff },
+  const criticalUnacked = await prisma.incident.findMany({
+    where: {
+      severity: 'critical',
+      status: 'open',
+      reportedAt: { lt: cutoff },
+    },
   });
   for (const inc of criticalUnacked) {
     await upsertAlert(
-      'critical_incident_unacknowledged', 'Incident', inc._id.toString(), 'critical',
-      `Critical incident ${inc.incidentId} has not been acknowledged within ${config.alert.criticalIncidentSlaMinutes} minutes`,
-      { rule: 'critical_incident_sla', inputs: { slaMinutes: config.alert.criticalIncidentSlaMinutes, reportedTime: inc.reportedTime } }
+      'critical_incident_unacknowledged', 'Incident', inc.id, 'critical',
+      `Critical incident ${inc.incidentNumber} has not been acknowledged within ${config.alert.criticalIncidentSlaMinutes} minutes`
     );
   }
 };
@@ -204,35 +193,43 @@ const checkCriticalIncidentSLA = async () => {
 const checkCargoArrivedNotReceived = async () => {
   const windowMs = config.alert.cargoArrivedNotReceivedHours * 60 * 60 * 1000;
   const cutoff = new Date(Date.now() - windowMs);
-  const arrived = await Shipment.find({ status: 'arrived', actualArrival: { $lt: cutoff } });
+  const arrived = await prisma.shipment.findMany({
+    where: { status: 'arrived', actualArrival: { lt: cutoff } },
+  });
   for (const s of arrived) {
     await upsertAlert(
-      'cargo_arrived_not_received', 'Shipment', s._id.toString(), 'warning',
-      `Shipment ${s.shipmentId} arrived but has not been received after ${config.alert.cargoArrivedNotReceivedHours}h`,
-      { rule: 'cargo_arrived_not_received', inputs: { arrivedAt: s.actualArrival, windowHours: config.alert.cargoArrivedNotReceivedHours } }
+      'cargo_arrived_not_received', 'Shipment', s.id, 'warning',
+      `Shipment ${s.shipmentNumber} arrived but has not been received after ${config.alert.cargoArrivedNotReceivedHours}h`
     );
   }
 };
 
 const checkInventoryInconsistencies = async () => {
-  const inconsistent = await InventoryItem.find({
-    $expr: { $gt: ['$reservedQuantity', '$onHandQuantity'] },
-  });
+  const inconsistent = await prisma.$queryRaw<{ id: string; name: string; reserved_quantity: number; on_hand_quantity: number }[]>`
+    SELECT id, name, 
+           CAST(reserved_quantity AS DECIMAL(12,2)) as reserved_quantity,
+           CAST(on_hand_quantity AS DECIMAL(12,2)) as on_hand_quantity
+    FROM inventory_items
+    WHERE CAST(reserved_quantity AS DECIMAL(12,2)) > CAST(on_hand_quantity AS DECIMAL(12,2))
+  `;
   for (const item of inconsistent) {
     await upsertAlert(
-      'inventory_inconsistency', 'InventoryItem', item._id.toString(), 'critical',
-      `${item.name} has reserved (${item.reservedQuantity}) > on-hand (${item.onHandQuantity})`,
-      { rule: 'reserved_exceeds_on_hand', inputs: { reserved: item.reservedQuantity, onHand: item.onHandQuantity } }
+      'inventory_inconsistency', 'InventoryItem', item.id, 'critical',
+      `${item.name} has reserved (${item.reserved_quantity}) > on-hand (${item.on_hand_quantity})`
     );
   }
 };
 
 const checkForecastThreshold = async () => {
-  const items = await InventoryItem.find({});
+  const items = await prisma.inventoryItem.findMany();
   for (const item of items) {
     const forecast = await computeForecast(
-      item._id.toString(), item.onHandQuantity, item.reservedQuantity,
-      item.minThreshold, item.unit, config.forecast.defaultWindowDays
+      item.id,
+      Number(item.onHandQuantity),
+      Number(item.reservedQuantity),
+      Number(item.minThreshold),
+      item.unit,
+      config.forecast.defaultWindowDays
     );
     if (
       forecast.estimatedDaysRemaining !== null &&
@@ -240,9 +237,8 @@ const checkForecastThreshold = async () => {
       forecast.confidence !== 'insufficient_data'
     ) {
       await upsertAlert(
-        'forecast_threshold', 'InventoryItem', item._id.toString(), 'warning',
-        `${item.name} forecast to deplete in ${Math.round(forecast.estimatedDaysRemaining)} days (confidence: ${forecast.confidence})`,
-        { rule: 'forecast_days_threshold', inputs: { daysRemaining: forecast.estimatedDaysRemaining, confidence: forecast.confidence, threshold: config.alert.forecastDaysThreshold } }
+        'forecast_threshold', 'InventoryItem', item.id, 'warning',
+        `${item.name} forecast to deplete in ${Math.round(forecast.estimatedDaysRemaining)} days (confidence: ${forecast.confidence})`
       );
     }
   }
@@ -250,18 +246,15 @@ const checkForecastThreshold = async () => {
 
 // ── §6.3 Priority Score ───────────────────────────────────────────────────
 export const computePriorityScore = (
-  criticality: number, // 0-10
+  criticality: number,
   daysUntilRequired: number,
   isDelayed: boolean,
-  resourceScarcity: number // 0-10
+  resourceScarcity: number
 ): { score: number; components: Record<string, number> } => {
   const w1 = 0.35, w2 = 0.30, w3 = 0.20, w4 = 0.15;
-
-  const urgency = Math.max(0, 10 - daysUntilRequired / 3); // 0-10
+  const urgency = Math.max(0, 10 - daysUntilRequired / 3);
   const delayScore = isDelayed ? 10 : 0;
-
   const score = w1 * criticality + w2 * urgency + w3 * delayScore + w4 * resourceScarcity;
-
   return {
     score: Math.round(score * 10) / 10,
     components: {

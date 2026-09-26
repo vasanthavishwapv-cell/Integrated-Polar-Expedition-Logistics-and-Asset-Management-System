@@ -2,10 +2,10 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { config } from '../config';
-import { User } from '../models/User';
-import { AuditLog } from '../models/Alert';
+import { prisma } from '../config/database';
 import { sendSuccess, sendError } from '../utils/response';
 import { AuthRequest } from '../middleware/auth';
+import { UserRole } from '@prisma/client';
 
 const signAccessToken = (userId: string, role: string) =>
   jwt.sign({ sub: userId, role }, config.jwt.accessSecret, {
@@ -25,32 +25,31 @@ const COOKIE_OPTS = {
 };
 
 export const register = async (req: Request, res: Response): Promise<void> => {
-  const { name, email, password, role, station } = req.body;
+  const { name, email, password, role, stationId } = req.body;
 
-  const existing = await User.findOne({ email });
+  const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
     sendError(res, 'CONFLICT', 'Email already registered', 409);
     return;
   }
 
   const hashed = await bcrypt.hash(password, config.bcryptRounds);
-  const user = await User.create({ name, email, password: hashed, role, station });
+  const user = await prisma.user.create({
+    data: { name, email, password: hashed, role: role as UserRole, stationId },
+    select: { id: true, name: true, email: true, role: true, stationId: true },
+  });
 
-  const accessToken = signAccessToken(user._id.toString(), user.role);
-  const refreshToken = signRefreshToken(user._id.toString(), user.refreshTokenVersion);
+  const accessToken = signAccessToken(user.id, user.role);
+  const refreshToken = signRefreshToken(user.id, 0);
 
   res.cookie('refreshToken', refreshToken, COOKIE_OPTS);
-
-  sendSuccess(res, {
-    accessToken,
-    user: { id: user._id, name: user.name, email: user.email, role: user.role },
-  }, 201);
+  sendSuccess(res, { accessToken, user }, 201);
 };
 
 export const login = async (req: Request, res: Response): Promise<void> => {
   const { email, password } = req.body;
 
-  const user = await User.findOne({ email }).select('+password');
+  const user = await prisma.user.findUnique({ where: { email } });
   if (!user || !user.isActive) {
     sendError(res, 'UNAUTHORIZED', 'Invalid credentials', 401);
     return;
@@ -62,14 +61,13 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  const accessToken = signAccessToken(user._id.toString(), user.role);
-  const refreshToken = signRefreshToken(user._id.toString(), user.refreshTokenVersion);
+  const accessToken = signAccessToken(user.id, user.role);
+  const refreshToken = signRefreshToken(user.id, user.refreshTokenVersion);
 
   res.cookie('refreshToken', refreshToken, COOKIE_OPTS);
-
   sendSuccess(res, {
     accessToken,
-    user: { id: user._id, name: user.name, email: user.email, role: user.role, station: user.station },
+    user: { id: user.id, name: user.name, email: user.email, role: user.role, stationId: user.stationId },
   });
 };
 
@@ -86,19 +84,19 @@ export const refresh = async (req: Request, res: Response): Promise<void> => {
       version: number;
     };
 
-    const user = await User.findById(payload.sub);
+    const user = await prisma.user.findUnique({ where: { id: payload.sub } });
     if (!user || !user.isActive || user.refreshTokenVersion !== payload.version) {
       sendError(res, 'UNAUTHORIZED', 'Invalid refresh token', 401);
       return;
     }
 
-    const accessToken = signAccessToken(user._id.toString(), user.role);
-    const newRefreshToken = signRefreshToken(user._id.toString(), user.refreshTokenVersion);
+    const accessToken = signAccessToken(user.id, user.role);
+    const newRefreshToken = signRefreshToken(user.id, user.refreshTokenVersion);
     res.cookie('refreshToken', newRefreshToken, COOKIE_OPTS);
 
     sendSuccess(res, {
       accessToken,
-      user: { id: user._id, name: user.name, email: user.email, role: user.role, station: user.station },
+      user: { id: user.id, name: user.name, email: user.email, role: user.role, stationId: user.stationId },
     });
   } catch {
     sendError(res, 'UNAUTHORIZED', 'Invalid or expired refresh token', 401);
@@ -107,13 +105,17 @@ export const refresh = async (req: Request, res: Response): Promise<void> => {
 
 export const logout = async (req: AuthRequest, res: Response): Promise<void> => {
   if (req.user) {
-    // Increment version to invalidate all existing refresh tokens
-    await User.findByIdAndUpdate(req.user._id, { $inc: { refreshTokenVersion: 1 } });
-    await AuditLog.create({
-      action: 'logout',
-      entityType: 'User',
-      entityId: req.user._id,
-      performedBy: req.user._id,
+    await prisma.user.update({
+      where: { id: req.user.id },
+      data: { refreshTokenVersion: { increment: 1 } },
+    });
+    await prisma.auditLog.create({
+      data: {
+        action: 'logout',
+        entityType: 'User',
+        entityId: req.user.id,
+        performedBy: req.user.id,
+      },
     });
   }
   res.clearCookie('refreshToken', COOKIE_OPTS);
@@ -127,41 +129,44 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
 // ── Admin user management ──────────────────────────────────────────────────
 
 export const getUsers = async (_req: Request, res: Response): Promise<void> => {
-  const users = await User.find().select('-password').sort({ createdAt: -1 });
+  const users = await prisma.user.findMany({
+    select: { id: true, name: true, email: true, role: true, stationId: true, isActive: true, createdAt: true },
+    orderBy: { createdAt: 'desc' },
+  });
   sendSuccess(res, users);
 };
 
 export const updateUserRole = async (req: AuthRequest, res: Response): Promise<void> => {
-  const user = await User.findByIdAndUpdate(
-    req.params.id,
-    { role: req.body.role },
-    { new: true }
-  ).select('-password');
-  if (!user) { sendError(res, 'NOT_FOUND', 'User not found', 404); return; }
-
-  await AuditLog.create({
-    action: 'update_role',
-    entityType: 'User',
-    entityId: user._id,
-    performedBy: req.user!._id,
-    changes: { role: { before: null, after: req.body.role } },
+  const user = await prisma.user.update({
+    where: { id: req.params.id },
+    data: { role: req.body.role as UserRole },
+    select: { id: true, name: true, email: true, role: true },
+  });
+  await prisma.auditLog.create({
+    data: {
+      action: 'update_role',
+      entityType: 'User',
+      entityId: user.id,
+      performedBy: req.user!.id,
+      afterJson: { role: req.body.role },
+    },
   });
   sendSuccess(res, user);
 };
 
 export const deactivateUser = async (req: AuthRequest, res: Response): Promise<void> => {
-  const user = await User.findByIdAndUpdate(
-    req.params.id,
-    { isActive: false, $inc: { refreshTokenVersion: 1 } },
-    { new: true }
-  ).select('-password');
-  if (!user) { sendError(res, 'NOT_FOUND', 'User not found', 404); return; }
-
-  await AuditLog.create({
-    action: 'deactivate_user',
-    entityType: 'User',
-    entityId: user._id,
-    performedBy: req.user!._id,
+  const user = await prisma.user.update({
+    where: { id: req.params.id },
+    data: { isActive: false, refreshTokenVersion: { increment: 1 } },
+    select: { id: true, name: true, email: true, role: true, isActive: true },
+  });
+  await prisma.auditLog.create({
+    data: {
+      action: 'deactivate_user',
+      entityType: 'User',
+      entityId: user.id,
+      performedBy: req.user!.id,
+    },
   });
   sendSuccess(res, user);
 };

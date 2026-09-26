@@ -16,7 +16,7 @@ const start = async () => {
   }, 5 * 60 * 1000);
 
   app.listen(config.port, () => {
-    logger.info(`POLARIS backend running on port ${config.port} [${config.env}]`);
+    logger.info(`POLARIS backend running on port ${config.port} [${config.env}] — TiDB Cloud`);
   });
 };
 

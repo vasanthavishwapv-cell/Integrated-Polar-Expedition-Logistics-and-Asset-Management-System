@@ -12,7 +12,7 @@ export default async function handler(req: Request, res: Response) {
       try {
         await initCounters();
       } catch {
-        // Counters already initialized or non-critical
+        // Non-critical
       }
       initialized = true;
     }

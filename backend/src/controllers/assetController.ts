@@ -1,99 +1,115 @@
 import { Response } from 'express';
-import { Asset } from '../models/Asset';
-import { MaintenanceRecord } from '../models/Asset';
-import { AuditLog, Alert } from '../models/Alert';
+import { prisma } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { sendSuccess, sendError, paginateMeta } from '../utils/response';
 import { generateSequentialId } from '../utils/idGenerator';
+import { AssetStatus } from '@prisma/client';
 
 export const listAssets = async (req: AuthRequest, res: Response): Promise<void> => {
   const page = Math.max(1, parseInt(req.query.page as string) || 1);
   const limit = Math.min(100, parseInt(req.query.limit as string) || 20);
-  const filter: Record<string, unknown> = {};
-  if (req.query.status) filter.status = req.query.status;
-  if (req.query.station) filter.assignedStation = req.query.station;
-  if (req.query.category) filter.category = req.query.category;
+
+  const where: any = {};
+  if (req.query.status) where.status = req.query.status;
+  if (req.query.station) where.stationId = req.query.station;
+  if (req.query.category) where.category = req.query.category;
 
   const [assets, total] = await Promise.all([
-    Asset.find(filter)
-      .populate('assignedStation', 'name code')
-      .sort({ name: 1 })
-      .skip((page - 1) * limit)
-      .limit(limit),
-    Asset.countDocuments(filter),
+    prisma.asset.findMany({
+      where,
+      include: { station: { select: { id: true, name: true, code: true } } },
+      orderBy: { name: 'asc' },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    prisma.asset.count({ where }),
   ]);
   sendSuccess(res, assets, 200, paginateMeta(total, page, limit));
 };
 
 export const createAsset = async (req: AuthRequest, res: Response): Promise<void> => {
-  const assetId = generateSequentialId('AST', new Date().getFullYear());
-  const body = { ...req.body, assetId };
-  if (body.maintenanceIntervalDays && body.acquisitionDate) {
-    const acq = new Date(body.acquisitionDate);
-    const next = new Date(acq);
-    next.setDate(next.getDate() + body.maintenanceIntervalDays);
-    body.nextMaintenanceDue = next;
-  }
-  const asset = await Asset.create(body);
-  await AuditLog.create({ action: 'create', entityType: 'Asset', entityId: asset._id, performedBy: req.user!._id });
+  const assetTag = req.body.assetTag || generateSequentialId('AST', new Date().getFullYear());
+  const asset = await prisma.asset.create({
+    data: { ...req.body, assetTag },
+    include: { station: { select: { id: true, name: true, code: true } } },
+  });
+  await prisma.auditLog.create({
+    data: { action: 'create', entityType: 'Asset', entityId: asset.id, performedBy: req.user!.id },
+  });
   sendSuccess(res, asset, 201);
 };
 
 export const getAsset = async (req: AuthRequest, res: Response): Promise<void> => {
-  const asset = await Asset.findById(req.params.id).populate('assignedStation', 'name code');
+  const asset = await prisma.asset.findUnique({
+    where: { id: req.params.id },
+    include: { station: { select: { id: true, name: true, code: true } } },
+  });
   if (!asset) { sendError(res, 'NOT_FOUND', 'Asset not found', 404); return; }
   sendSuccess(res, asset);
 };
 
 export const updateAsset = async (req: AuthRequest, res: Response): Promise<void> => {
-  const before = await Asset.findById(req.params.id);
+  const before = await prisma.asset.findUnique({ where: { id: req.params.id } });
   if (!before) { sendError(res, 'NOT_FOUND', 'Asset not found', 404); return; }
 
-  const asset = await Asset.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
-  await AuditLog.create({
-    action: 'update',
-    entityType: 'Asset',
-    entityId: asset!._id,
-    performedBy: req.user!._id,
-    changes: { status: { before: before.status, after: asset!.status } },
+  const asset = await prisma.asset.update({
+    where: { id: req.params.id },
+    data: req.body,
+    include: { station: { select: { id: true, name: true, code: true } } },
+  });
+  await prisma.auditLog.create({
+    data: {
+      action: 'update',
+      entityType: 'Asset',
+      entityId: asset.id,
+      performedBy: req.user!.id,
+      beforeJson: { status: before.status } as any,
+      afterJson: { status: asset.status } as any,
+    },
   });
   sendSuccess(res, asset);
 };
 
 export const addMaintenanceRecord = async (req: AuthRequest, res: Response): Promise<void> => {
-  const asset = await Asset.findById(req.params.id);
+  const asset = await prisma.asset.findUnique({ where: { id: req.params.id } });
   if (!asset) { sendError(res, 'NOT_FOUND', 'Asset not found', 404); return; }
 
-  const record = await MaintenanceRecord.create({
-    ...req.body,
-    asset: asset._id,
-    recordedBy: req.user!._id,
+  const record = await prisma.maintenanceRecord.create({
+    data: {
+      assetId: asset.id,
+      serviceType: req.body.serviceType,
+      hoursAtService: req.body.hoursAtService || asset.hourMeter,
+      performedBy: req.user!.id,
+      notes: req.body.notes,
+      cost: req.body.cost || 0,
+      nextServiceDue: req.body.nextServiceDue || (asset.nextServiceDue + 250),
+    },
   });
 
-  // Update asset maintenance dates
-  asset.lastMaintenanceDate = new Date(req.body.maintenanceDate);
-  if (req.body.nextScheduledDate) {
-    asset.nextMaintenanceDue = new Date(req.body.nextScheduledDate);
-  } else if (asset.maintenanceIntervalDays) {
-    const next = new Date(req.body.maintenanceDate);
-    next.setDate(next.getDate() + asset.maintenanceIntervalDays);
-    asset.nextMaintenanceDue = next;
-  }
-  if (req.body.type === 'scheduled') asset.status = 'operational';
-  await asset.save();
+  // Update asset's service tracking
+  await prisma.asset.update({
+    where: { id: asset.id },
+    data: {
+      lastServiceDate: new Date(),
+      nextServiceDue: req.body.nextServiceDue || (asset.nextServiceDue + 250),
+      status: req.body.serviceType === 'routine' || req.body.serviceType === 'repair' ? 'operational' : undefined,
+    },
+  });
 
-  // Resolve any open maintenance_due alert for this asset
-  await Alert.findOneAndUpdate(
-    { type: 'maintenance_due', entityId: asset._id, status: 'open' },
-    { status: 'resolved' }
-  );
+  // Resolve open maintenance_due alerts for this asset
+  await prisma.alert.updateMany({
+    where: { type: 'maintenance_due', entityId: asset.id, status: 'open' },
+    data: { status: 'resolved' },
+  });
 
   sendSuccess(res, record, 201);
 };
 
 export const getMaintenanceHistory = async (req: AuthRequest, res: Response): Promise<void> => {
-  const records = await MaintenanceRecord.find({ asset: req.params.id })
-    .populate('recordedBy', 'name')
-    .sort({ maintenanceDate: -1 });
+  const records = await prisma.maintenanceRecord.findMany({
+    where: { assetId: req.params.id },
+    include: { performer: { select: { id: true, name: true } } },
+    orderBy: { performedAt: 'desc' },
+  });
   sendSuccess(res, records);
 };

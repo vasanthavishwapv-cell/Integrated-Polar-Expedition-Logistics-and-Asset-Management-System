@@ -1,92 +1,97 @@
 import { Response } from 'express';
-import { Expedition, isValidExpeditionTransition, ExpeditionStatus } from '../models/Expedition';
-import { AuditLog } from '../models/Alert';
+import { prisma } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { sendSuccess, sendError, paginateMeta } from '../utils/response';
 import { generateSequentialId } from '../utils/idGenerator';
+import { ExpeditionStatus } from '@prisma/client';
+
+const VALID_EXPEDITION_TRANSITIONS: Record<string, string[]> = {
+  draft: ['planned'],
+  planned: ['active', 'cancelled'],
+  active: ['completed', 'cancelled'],
+  completed: [],
+  cancelled: [],
+};
 
 export const listExpeditions = async (req: AuthRequest, res: Response): Promise<void> => {
   const page = Math.max(1, parseInt(req.query.page as string) || 1);
   const limit = Math.min(100, parseInt(req.query.limit as string) || 20);
-  const skip = (page - 1) * limit;
 
-  const filter: Record<string, unknown> = {};
-  if (req.query.status) filter.status = req.query.status;
-  if (req.query.destination) filter.destination = req.query.destination;
-  if (req.query.startDate) filter.startDate = { $gte: new Date(req.query.startDate as string) };
-  if (req.query.endDate) filter.endDate = { $lte: new Date(req.query.endDate as string) };
+  const where: any = {};
+  if (req.query.status) where.status = req.query.status;
+  if (req.query.destination) where.destinationId = req.query.destination;
 
   const [expeditions, total] = await Promise.all([
-    Expedition.find(filter)
-      .populate('destination', 'name code')
-      .populate('assignedPersonnel', 'name role')
-      .sort({ startDate: 1 })
-      .skip(skip)
-      .limit(limit),
-    Expedition.countDocuments(filter),
+    prisma.expedition.findMany({
+      where,
+      include: { destination: { select: { id: true, name: true, code: true } } },
+      orderBy: { startDate: 'asc' },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    prisma.expedition.count({ where }),
   ]);
 
   sendSuccess(res, expeditions, 200, paginateMeta(total, page, limit));
 };
 
 export const createExpedition = async (req: AuthRequest, res: Response): Promise<void> => {
-  const expedition = await Expedition.create({ ...req.body, createdBy: req.user!._id });
-  await AuditLog.create({
-    action: 'create',
-    entityType: 'Expedition',
-    entityId: expedition._id,
-    performedBy: req.user!._id,
+  const expedition = await prisma.expedition.create({
+    data: { ...req.body, createdBy: req.user!.id },
+    include: { destination: { select: { id: true, name: true, code: true } } },
+  });
+  await prisma.auditLog.create({
+    data: { action: 'create', entityType: 'Expedition', entityId: expedition.id, performedBy: req.user!.id },
   });
   sendSuccess(res, expedition, 201);
 };
 
 export const getExpedition = async (req: AuthRequest, res: Response): Promise<void> => {
-  const expedition = await Expedition.findById(req.params.id)
-    .populate('destination', 'name code location')
-    .populate('assignedPersonnel', 'name role department');
+  const expedition = await prisma.expedition.findUnique({
+    where: { id: req.params.id },
+    include: { destination: { select: { id: true, name: true, code: true } }, creator: { select: { id: true, name: true } } },
+  });
   if (!expedition) { sendError(res, 'NOT_FOUND', 'Expedition not found', 404); return; }
   sendSuccess(res, expedition);
 };
 
 export const updateExpedition = async (req: AuthRequest, res: Response): Promise<void> => {
-  const expedition = await Expedition.findById(req.params.id);
-  if (!expedition) { sendError(res, 'NOT_FOUND', 'Expedition not found', 404); return; }
+  const before = await prisma.expedition.findUnique({ where: { id: req.params.id } });
+  if (!before) { sendError(res, 'NOT_FOUND', 'Expedition not found', 404); return; }
 
-  if (req.body.status && req.body.status !== expedition.status) {
-    if (!isValidExpeditionTransition(expedition.status, req.body.status as ExpeditionStatus)) {
-      sendError(res, 'CONFLICT', `Cannot transition from ${expedition.status} to ${req.body.status}`, 409);
+  if (req.body.status && req.body.status !== before.status) {
+    const allowed = VALID_EXPEDITION_TRANSITIONS[before.status] || [];
+    if (!allowed.includes(req.body.status)) {
+      sendError(res, 'CONFLICT', `Cannot transition from ${before.status} to ${req.body.status}`, 409);
       return;
     }
   }
 
-  const before = expedition.toObject();
-  Object.assign(expedition, req.body);
-  await expedition.save();
-
-  await AuditLog.create({
-    action: 'update',
-    entityType: 'Expedition',
-    entityId: expedition._id,
-    performedBy: req.user!._id,
-    changes: { before, after: expedition.toObject() } as any,
+  const expedition = await prisma.expedition.update({
+    where: { id: req.params.id },
+    data: req.body,
+    include: { destination: { select: { id: true, name: true, code: true } } },
   });
-
+  await prisma.auditLog.create({
+    data: {
+      action: 'update',
+      entityType: 'Expedition',
+      entityId: expedition.id,
+      performedBy: req.user!.id,
+      beforeJson: before as any,
+      afterJson: expedition as any,
+    },
+  });
   sendSuccess(res, expedition);
 };
 
 export const deleteExpedition = async (req: AuthRequest, res: Response): Promise<void> => {
-  const expedition = await Expedition.findById(req.params.id);
+  const expedition = await prisma.expedition.findUnique({ where: { id: req.params.id } });
   if (!expedition) { sendError(res, 'NOT_FOUND', 'Expedition not found', 404); return; }
-  if (!['draft', 'planned'].includes(expedition.status)) {
-    sendError(res, 'CONFLICT', 'Only draft or planned expeditions can be deleted', 409);
+  if (expedition.status === 'active') {
+    sendError(res, 'CONFLICT', 'Cannot delete an active expedition', 409);
     return;
   }
-  await expedition.deleteOne();
-  await AuditLog.create({
-    action: 'delete',
-    entityType: 'Expedition',
-    entityId: expedition._id,
-    performedBy: req.user!._id,
-  });
+  await prisma.expedition.delete({ where: { id: req.params.id } });
   sendSuccess(res, { message: 'Expedition deleted' });
 };

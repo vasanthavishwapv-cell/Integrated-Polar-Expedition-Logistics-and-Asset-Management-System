@@ -4,12 +4,14 @@
   "description": "POLARIS — Polar Logistics and Resource Intelligence System (SIH26062)",
   "private": true,
   "scripts": {
-    "build": "cd frontend && npm install --include=dev && npm run build",
-    "vercel-build": "cd frontend && npm install --include=dev && npm run build",
+    "postinstall": "prisma generate --schema=backend/prisma/schema.prisma",
+    "build": "prisma generate --schema=backend/prisma/schema.prisma && cd frontend && npm install --include=dev && npm run build",
+    "vercel-build": "prisma generate --schema=backend/prisma/schema.prisma && cd frontend && npm install --include=dev && npm run build",
     "seed": "cd backend && npm run seed",
     "start": "cd backend && npm start"
   },
   "dependencies": {
+    "@prisma/client": "^5.22.0",
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
@@ -34,6 +36,7 @@
     "@types/node": "^22.14.1",
     "@types/uuid": "^10.0.0",
     "@vercel/node": "^5.1.13",
+    "prisma": "^5.22.0",
     "typescript": "5.8.3"
   }
 }

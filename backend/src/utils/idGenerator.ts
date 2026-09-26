@@ -1,5 +1,7 @@
-// Simple sequential ID generator backed by counters in-memory during session
-// For production, use a dedicated counter collection
+// Simple sequential ID generator — in-memory counters per session
+// For TiDB, we initialize from the last existing IDs in the DB at startup
+import { prisma } from '../config/database';
+
 const counters: Record<string, number> = {};
 
 export const generateSequentialId = (prefix: string, year: number): string => {
@@ -8,31 +10,30 @@ export const generateSequentialId = (prefix: string, year: number): string => {
   return `${prefix}-${year}-${String(counters[key]).padStart(4, '0')}`;
 };
 
-// Initialize counters from DB (call on startup)
+const extractNum = (id: string | null | undefined): number => {
+  if (!id) return 0;
+  const parts = id.split('-');
+  return parseInt(parts[parts.length - 1], 10) || 0;
+};
+
+// Initialize counters from TiDB at startup
 export const initCounters = async (): Promise<void> => {
-  // Dynamically import to avoid circular deps
-  const { Shipment } = await import('../models/Shipment');
-  const { Personnel } = await import('../models/Personnel');
-  const { Asset } = await import('../models/Asset');
-  const { Incident } = await import('../models/Incident');
-
   const year = new Date().getFullYear();
+  const yearStr = String(year);
 
-  const [lastShipment, lastPersonnel, lastAsset, lastIncident] = await Promise.all([
-    Shipment.findOne({ shipmentId: new RegExp(`^SHP-${year}`) }).sort({ shipmentId: -1 }),
-    Personnel.findOne({ personnelId: new RegExp(`^PRS-${year}`) }).sort({ personnelId: -1 }),
-    Asset.findOne({ assetId: new RegExp(`^AST-${year}`) }).sort({ assetId: -1 }),
-    Incident.findOne({ incidentId: new RegExp(`^INC-${year}`) }).sort({ incidentId: -1 }),
+  const [lastShipment, lastIncident] = await Promise.all([
+    prisma.shipment.findFirst({
+      where: { shipmentNumber: { startsWith: `SHP-${year}` } },
+      orderBy: { shipmentNumber: 'desc' },
+    }),
+    prisma.incident.findFirst({
+      where: { incidentNumber: { startsWith: `INC-${year}` } },
+      orderBy: { incidentNumber: 'desc' },
+    }),
   ]);
 
-  const extractNum = (id: string | undefined) => {
-    if (!id) return 0;
-    const parts = id.split('-');
-    return parseInt(parts[parts.length - 1], 10) || 0;
-  };
-
-  counters[`SHP-${year}`] = extractNum(lastShipment?.shipmentId);
-  counters[`PRS-${year}`] = extractNum(lastPersonnel?.personnelId);
-  counters[`AST-${year}`] = extractNum(lastAsset?.assetId);
-  counters[`INC-${year}`] = extractNum(lastIncident?.incidentId);
+  counters[`SHP-${year}`] = extractNum(lastShipment?.shipmentNumber);
+  counters[`INC-${year}`] = extractNum(lastIncident?.incidentNumber);
+  counters[`AST-${year}`] = 0; // asset tags are unique strings, not sequential in TiDB schema
+  counters[`PRS-${year}`] = 0; // personnel IDs are UUIDs in TiDB schema
 };
