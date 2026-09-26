@@ -1,328 +1,294 @@
 /**
- * POLARIS Seed Script
+ * POLARIS — Seed Script for TiDB Cloud (Prisma ORM)
  * Run: npm run seed
- * Resets DB to a reproducible demo state (targets from §12 of the spec)
- *
- * Demo credentials (one per role):
- *   vasanthavishwa@polaris.com / Polaris@2026
- *   coordinator@polaris.com    / Polaris@2026
- *   logistics@polaris.com      / Polaris@2026
- *   inventory@polaris.com      / Polaris@2026
- *   personnel@polaris.com      / Polaris@2026
- *   emergency@polaris.com      / Polaris@2026
- *   ops@polaris.com            / Polaris@2026
+ * Populates stations, users, expeditions, inventory items, 90-day ledger history,
+ * shipments, cargo, personnel, assets, incidents, and alerts.
  */
 import dotenv from 'dotenv';
 dotenv.config();
 
-import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
-import { User } from './models/User';
-import { Station } from './models/Station';
-import { Expedition } from './models/Expedition';
-import { Shipment } from './models/Shipment';
-import { InventoryItem, InventoryTransaction } from './models/Inventory';
-import { Personnel } from './models/Personnel';
-import { Asset, MaintenanceRecord } from './models/Asset';
-import { Incident } from './models/Incident';
-import { Alert, AuditLog } from './models/Alert';
+import { prisma } from './config/database';
+import {
+  StationStatus,
+  UserRole,
+  ExpeditionMissionType,
+  ExpeditionStatus,
+  InventoryCategory,
+  TransactionType,
+  ShipmentStatus,
+  ClearanceStatus,
+  PersonnelStatus,
+  AssetCategory,
+  AssetStatus,
+  CriticalRating,
+  IncidentSeverity,
+  IncidentCategory,
+  IncidentStatus,
+  AlertType,
+  AlertSeverity,
+  AlertStatus,
+} from '@prisma/client';
 
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/polaris';
 const PASSWORD = 'Polaris@2026';
 
 async function seed() {
-  await mongoose.connect(MONGO_URI);
-  console.log('Connected to MongoDB');
+  console.log('Connecting to TiDB Cloud via Prisma...');
 
-  // ── Wipe everything ──────────────────────────────────────────────────
-  await Promise.all([
-    User.deleteMany({}), Station.deleteMany({}), Expedition.deleteMany({}),
-    Shipment.deleteMany({}), InventoryItem.deleteMany({}), InventoryTransaction.deleteMany({}),
-    Personnel.deleteMany({}), Asset.deleteMany({}), MaintenanceRecord.deleteMany({}),
-    Incident.deleteMany({}), Alert.deleteMany({}), AuditLog.deleteMany({}),
-  ]);
-  console.log('Database wiped');
+  const hashed = await bcrypt.hash(PASSWORD, 10);
 
-  const hashed = await bcrypt.hash(PASSWORD, 12);
+  // ── 1. Stations ────────────────────────────────────────────────────────
+  console.log('Seeding Stations...');
+  const stationsData = [
+    { id: 'stat-maitri', name: 'Maitri Station', code: 'MAIT', location: 'Queen Maud Land, Antarctica', lat: -70.77, lon: 11.73, status: 'active' as StationStatus, timezone: 'UTC+5:30' },
+    { id: 'stat-dakshin', name: 'Dakshin Gangotri', code: 'DAK', location: 'Princess Astrid Coast, Antarctica', lat: -70.08, lon: 12.0, status: 'winter_over' as StationStatus, timezone: 'UTC' },
+    { id: 'stat-bharati', name: 'Bharati Station', code: 'BHAR', location: 'Larsemann Hills, East Antarctica', lat: -69.41, lon: 76.18, status: 'active' as StationStatus, timezone: 'UTC+5' },
+  ];
 
-  // ── Stations ─────────────────────────────────────────────────────────
-  const stations = await Station.insertMany([
-    { name: 'Maitri Station', code: 'MAIT', location: 'Queen Maud Land, Antarctica (Simulated)', coordinates: { lat: -70.77, lon: 11.73 }, status: 'active', timezone: 'UTC+5:30' },
-    { name: 'Dakshin Gangotri', code: 'DAK', location: 'Princess Astrid Coast, Antarctica (Simulated)', coordinates: { lat: -70.08, lon: 12.0 }, status: 'winter-over', timezone: 'UTC' },
-    { name: 'Bharati Station', code: 'BHAR', location: 'Larsemann Hills, East Antarctica (Simulated)', coordinates: { lat: -69.41, lon: 76.18 }, status: 'active', timezone: 'UTC+5' },
-  ]);
-  console.log(`Created ${stations.length} stations`);
+  for (const s of stationsData) {
+    await prisma.station.upsert({
+      where: { code: s.code },
+      create: s,
+      update: s,
+    });
+  }
 
-  // ── Users ─────────────────────────────────────────────────────────────
-  const users = await User.insertMany([
-    { name: 'Vasantha Vishwa', email: 'vasanthavishwa@polaris.com', password: hashed, role: 'admin', station: stations[0]._id, isActive: true },
-    { name: 'Capt. Arjun Mehta', email: 'coordinator@polaris.com', password: hashed, role: 'expedition_coordinator', station: stations[0]._id, isActive: true },
-    { name: 'Lt. Priya Nair', email: 'logistics@polaris.com', password: hashed, role: 'logistics_officer', station: stations[0]._id, isActive: true },
-    { name: 'Dr. Kavya Reddy', email: 'inventory@polaris.com', password: hashed, role: 'inventory_manager', station: stations[1]._id, isActive: true },
-    { name: 'Maj. Suresh Kumar', email: 'personnel@polaris.com', password: hashed, role: 'personnel_coordinator', station: stations[2]._id, isActive: true },
-    { name: 'Dr. Anita Sharma', email: 'emergency@polaris.com', password: hashed, role: 'emergency_coordinator', station: stations[0]._id, isActive: true },
-    { name: 'Tech. Rajan Pillai', email: 'ops@polaris.com', password: hashed, role: 'station_ops', station: stations[0]._id, isActive: true },
-  ]);
-  console.log(`Created ${users.length} users`);
-  const [adminUser, coordUser, logisticsUser] = users;
+  // ── 2. Users ───────────────────────────────────────────────────────────
+  console.log('Seeding Users...');
+  const usersData = [
+    { id: 'usr-admin-vasantha', name: 'Vasantha Vishwa', email: 'vasanthavishwa@polaris.com', password: hashed, role: 'admin' as UserRole, stationId: 'stat-maitri', isActive: true },
+    { id: 'usr-coord-arjun', name: 'Capt. Arjun Mehta', email: 'coordinator@polaris.com', password: hashed, role: 'expedition_coordinator' as UserRole, stationId: 'stat-maitri', isActive: true },
+    { id: 'usr-logistics-priya', name: 'Lt. Priya Nair', email: 'logistics@polaris.com', password: hashed, role: 'logistics_officer' as UserRole, stationId: 'stat-maitri', isActive: true },
+    { id: 'usr-inv-kavya', name: 'Dr. Kavya Reddy', email: 'inventory@polaris.com', password: hashed, role: 'inventory_manager' as UserRole, stationId: 'stat-dakshin', isActive: true },
+    { id: 'usr-emerg-anita', name: 'Dr. Anita Sharma', email: 'emergency@polaris.com', password: hashed, role: 'emergency_coordinator' as UserRole, stationId: 'stat-maitri', isActive: true },
+    { id: 'usr-ops-rajan', name: 'Tech. Rajan Pillai', email: 'ops@polaris.com', password: hashed, role: 'station_ops' as UserRole, stationId: 'stat-maitri', isActive: true },
+  ];
 
-  // ── Expeditions ───────────────────────────────────────────────────────
-  const expeditions = await Expedition.insertMany([
-    { name: 'POLAR-2026-01: Geomagnetic Survey', missionType: 'scientific', destination: stations[0]._id, startDate: new Date('2026-10-01'), endDate: new Date('2026-12-15'), status: 'active', planningProgress: 85, description: 'Annual geomagnetic field survey around Maitri Station', createdBy: adminUser._id },
-    { name: 'POLAR-2026-02: Winter Resupply', missionType: 'resupply', destination: stations[1]._id, startDate: new Date('2026-11-10'), endDate: new Date('2026-11-25'), status: 'planned', planningProgress: 60, description: 'Critical winter resupply to Dakshin Gangotri', createdBy: coordUser._id },
-    { name: 'POLAR-2026-03: Ice Core Drilling', missionType: 'scientific', destination: stations[2]._id, startDate: new Date('2026-12-01'), endDate: new Date('2027-02-28'), status: 'planned', planningProgress: 40, description: 'Deep ice core extraction for paleoclimate research', createdBy: coordUser._id },
-    { name: 'POLAR-2025-05: Equipment Overhaul', missionType: 'maintenance', destination: stations[0]._id, startDate: new Date('2025-09-01'), endDate: new Date('2025-10-30'), status: 'completed', planningProgress: 100, description: 'Annual equipment overhaul completed', createdBy: adminUser._id },
-    { name: 'POLAR-2025-04: Emergency Medical', missionType: 'emergency', destination: stations[1]._id, startDate: new Date('2025-07-15'), endDate: new Date('2025-07-20'), status: 'completed', planningProgress: 100, description: 'Emergency medical evacuation mission', createdBy: adminUser._id },
-    { name: 'POLAR-2026-04: Atmospheric Study', missionType: 'scientific', destination: stations[2]._id, startDate: new Date('2027-01-15'), endDate: new Date('2027-03-30'), status: 'draft', planningProgress: 15, description: 'Ozone layer monitoring expedition', createdBy: coordUser._id },
-  ]);
-  console.log(`Created ${expeditions.length} expeditions`);
+  for (const u of usersData) {
+    await prisma.user.upsert({
+      where: { email: u.email },
+      create: u,
+      update: { name: u.name, password: u.password, role: u.role, stationId: u.stationId, isActive: u.isActive },
+    });
+  }
 
-  // ── Shipments ─────────────────────────────────────────────────────────
-  const now = new Date();
-  const d = (days: number) => { const dt = new Date(now); dt.setDate(dt.getDate() + days); return dt; };
-  const shipments = await Shipment.insertMany([
-    { shipmentId: 'SHP-2026-0001', origin: stations[0]._id, destination: stations[1]._id, linkedExpedition: expeditions[1]._id, estimatedArrival: d(-2), actualArrival: d(-2), status: 'arrived', cargoItems: [{ name: 'Freeze-dried rations (90 day)', category: 'food', quantity: 500, unit: 'kg' }, { name: 'Diesel fuel', category: 'fuel', quantity: 2000, unit: 'liters' }], createdBy: logisticsUser._id },
-    { shipmentId: 'SHP-2026-0002', origin: stations[0]._id, destination: stations[2]._id, estimatedArrival: d(5), status: 'in_transit', cargoItems: [{ name: 'Medical supplies kit', category: 'medical', quantity: 50, unit: 'units' }], createdBy: logisticsUser._id },
-    { shipmentId: 'SHP-2026-0003', origin: stations[2]._id, destination: stations[0]._id, estimatedArrival: d(-5), status: 'delayed', cargoItems: [{ name: 'Ice core drill bits', category: 'research_equipment', quantity: 20, unit: 'units' }], notes: 'Weather delay at Bharati Station', createdBy: logisticsUser._id },
-    { shipmentId: 'SHP-2026-0004', origin: stations[0]._id, destination: stations[1]._id, estimatedArrival: d(-10), actualArrival: d(-10), status: 'received', receivedAt: d(-9), receiveIdempotencyKey: 'demo-idem-0004', cargoItems: [{ name: 'Emergency generator parts', category: 'spare_parts', quantity: 5, unit: 'sets' }], createdBy: adminUser._id },
-    { shipmentId: 'SHP-2026-0005', origin: stations[0]._id, destination: stations[0]._id, estimatedArrival: d(10), status: 'prepared', cargoItems: [{ name: 'Protective cold weather gear', category: 'protective_equipment', quantity: 30, unit: 'sets' }, { name: 'VHF radio sets', category: 'communication_supplies', quantity: 10, unit: 'units' }], createdBy: logisticsUser._id },
-    { shipmentId: 'SHP-2026-0006', origin: stations[2]._id, destination: stations[0]._id, estimatedArrival: d(-8), status: 'delayed', cargoItems: [{ name: 'Atmospheric sensor array', category: 'research_equipment', quantity: 3, unit: 'units' }], notes: 'Logistics delay at Bharati', createdBy: coordUser._id },
-    { shipmentId: 'SHP-2026-0007', origin: stations[0]._id, destination: stations[2]._id, estimatedArrival: d(15), status: 'dispatched', cargoItems: [{ name: 'Food rations (30 day)', category: 'food', quantity: 200, unit: 'kg' }], createdBy: logisticsUser._id },
-    { shipmentId: 'SHP-2026-0008', origin: stations[1]._id, destination: stations[0]._id, estimatedArrival: d(3), status: 'in_transit', cargoItems: [{ name: 'Geomagnetic sensors', category: 'research_equipment', quantity: 8, unit: 'units' }], createdBy: coordUser._id },
-  ]);
-  console.log(`Created ${shipments.length} shipments`);
+  // ── 3. Expeditions ─────────────────────────────────────────────────────
+  console.log('Seeding Expeditions...');
+  const expeditionsData = [
+    { id: 'exp-2026-01', name: 'POLAR-2026-01: Geomagnetic Survey', missionType: 'scientific' as ExpeditionMissionType, destinationId: 'stat-maitri', startDate: new Date('2026-10-01'), endDate: new Date('2026-12-15'), status: 'active' as ExpeditionStatus, planningProgress: 85, description: 'Annual geomagnetic field survey around Maitri Station', createdBy: 'usr-admin-vasantha' },
+    { id: 'exp-2026-02', name: 'POLAR-2026-02: Winter Resupply', missionType: 'resupply' as ExpeditionMissionType, destinationId: 'stat-dakshin', startDate: new Date('2026-11-10'), endDate: new Date('2026-11-25'), status: 'planned' as ExpeditionStatus, planningProgress: 60, description: 'Critical winter resupply to Dakshin Gangotri', createdBy: 'usr-coord-arjun' },
+    { id: 'exp-2026-03', name: 'POLAR-2026-03: Ice Core Drilling', missionType: 'scientific' as ExpeditionMissionType, destinationId: 'stat-bharati', startDate: new Date('2026-12-01'), endDate: new Date('2027-02-28'), status: 'planned' as ExpeditionStatus, planningProgress: 40, description: 'Deep ice core extraction for paleoclimate research', createdBy: 'usr-coord-arjun' },
+    { id: 'exp-2025-05', name: 'POLAR-2025-05: Equipment Overhaul', missionType: 'maintenance' as ExpeditionMissionType, destinationId: 'stat-maitri', startDate: new Date('2025-09-01'), endDate: new Date('2025-10-30'), status: 'completed' as ExpeditionStatus, planningProgress: 100, description: 'Annual equipment overhaul completed', createdBy: 'usr-admin-vasantha' },
+    { id: 'exp-2025-04', name: 'POLAR-2025-04: Emergency Medical', missionType: 'emergency' as ExpeditionMissionType, destinationId: 'stat-dakshin', startDate: new Date('2025-07-15'), endDate: new Date('2025-07-20'), status: 'completed' as ExpeditionStatus, planningProgress: 100, description: 'Emergency medical evacuation mission', createdBy: 'usr-admin-vasantha' },
+  ];
 
-  // ── Inventory Items ───────────────────────────────────────────────────
-  const inventoryItems = await InventoryItem.insertMany([
-    // FOOD
-    { name: 'Freeze-dried rations', category: 'food', station: stations[0]._id, onHandQuantity: 350, reservedQuantity: 50, unit: 'kg', minThreshold: 400 },
-    { name: 'Emergency protein bars', category: 'food', station: stations[0]._id, onHandQuantity: 1200, reservedQuantity: 0, unit: 'units', minThreshold: 500 },
-    { name: 'Canned vegetables', category: 'food', station: stations[1]._id, onHandQuantity: 80, reservedQuantity: 10, unit: 'kg', minThreshold: 100 },
-    // FUEL
-    { name: 'Diesel (Aviation Grade)', category: 'fuel', station: stations[0]._id, onHandQuantity: 8000, reservedQuantity: 1000, unit: 'liters', minThreshold: 5000 },
-    { name: 'Kerosene', category: 'fuel', station: stations[1]._id, onHandQuantity: 800, reservedQuantity: 0, unit: 'liters', minThreshold: 1000 },
-    { name: 'Propane cylinders', category: 'fuel', station: stations[2]._id, onHandQuantity: 25, reservedQuantity: 5, unit: 'cylinders', minThreshold: 20 },
-    // MEDICAL
-    { name: 'First Aid Kit (Level 3)', category: 'medical', station: stations[0]._id, onHandQuantity: 15, reservedQuantity: 0, unit: 'kits', minThreshold: 10 },
-    { name: 'Antibiotics (broad spectrum)', category: 'medical', station: stations[0]._id, onHandQuantity: 200, reservedQuantity: 0, unit: 'doses', minThreshold: 150 },
-    { name: 'Morphine injections', category: 'medical', station: stations[1]._id, onHandQuantity: 30, reservedQuantity: 5, unit: 'vials', minThreshold: 40 }, // BELOW THRESHOLD
-    // RESEARCH
-    { name: 'Ice core sample containers', category: 'research_equipment', station: stations[2]._id, onHandQuantity: 120, reservedQuantity: 20, unit: 'units', minThreshold: 80 },
-    { name: 'Atmospheric sensor filters', category: 'research_equipment', station: stations[2]._id, onHandQuantity: 45, reservedQuantity: 0, unit: 'units', minThreshold: 30 },
-    // SPARE PARTS
-    { name: 'Generator spark plugs', category: 'spare_parts', station: stations[0]._id, onHandQuantity: 12, reservedQuantity: 0, unit: 'units', minThreshold: 20 }, // BELOW THRESHOLD
-    { name: 'Snow vehicle tracks', category: 'spare_parts', station: stations[0]._id, onHandQuantity: 4, reservedQuantity: 2, unit: 'pairs', minThreshold: 4 }, // AT THRESHOLD
-    // PROTECTIVE
-    { name: 'Extreme cold weather suits', category: 'protective_equipment', station: stations[0]._id, onHandQuantity: 42, reservedQuantity: 10, unit: 'suits', minThreshold: 30 },
-    { name: 'Thermal gloves (arctic grade)', category: 'protective_equipment', station: stations[1]._id, onHandQuantity: 60, reservedQuantity: 0, unit: 'pairs', minThreshold: 40 },
-    // COMMS
-    { name: 'VHF Radio sets', category: 'communication_supplies', station: stations[0]._id, onHandQuantity: 18, reservedQuantity: 2, unit: 'units', minThreshold: 15 },
-    { name: 'Satellite phone batteries', category: 'communication_supplies', station: stations[1]._id, onHandQuantity: 8, reservedQuantity: 0, unit: 'units', minThreshold: 12 }, // BELOW THRESHOLD
-    // OTHER
-    { name: 'Scientific data storage drives', category: 'other', station: stations[2]._id, onHandQuantity: 30, reservedQuantity: 0, unit: 'units', minThreshold: 20 },
-  ]);
-  console.log(`Created ${inventoryItems.length} inventory items`);
+  for (const exp of expeditionsData) {
+    await prisma.expedition.upsert({
+      where: { id: exp.id },
+      create: exp,
+      update: exp,
+    });
+  }
 
-  // ── 90-day backdated consumption transactions (for forecasting) ───────
-  const topItems = inventoryItems.slice(0, 5); // first 5 items get 90-day history
-  const txRecords = [];
-  for (const item of topItems) {
-    for (let dayOffset = 90; dayOffset >= 1; dayOffset--) {
+  // ── 4. Inventory Items ─────────────────────────────────────────────────
+  console.log('Seeding Inventory Items...');
+  const itemsData = [
+    { id: 'item-fuel-01', name: 'Diesel (Aviation Grade)', sku: 'SKU-FUEL-001', category: 'fuel' as InventoryCategory, unit: 'liters', onHandQuantity: 8000, reservedQuantity: 1000, minThreshold: 5000, targetStock: 12000, unitCost: 1.85, storageLocation: 'Fuel Bay Alpha', stationId: 'stat-maitri' },
+    { id: 'item-fuel-02', name: 'Kerosene', sku: 'SKU-FUEL-002', category: 'fuel' as InventoryCategory, unit: 'liters', onHandQuantity: 800, reservedQuantity: 0, minThreshold: 1000, targetStock: 2500, unitCost: 1.40, storageLocation: 'Tank B', stationId: 'stat-dakshin' },
+    { id: 'item-food-01', name: 'Freeze-dried rations (90 day)', sku: 'SKU-FOOD-001', category: 'rations' as InventoryCategory, unit: 'kg', onHandQuantity: 350, reservedQuantity: 50, minThreshold: 400, targetStock: 800, unitCost: 12.50, storageLocation: 'Pantry 1', stationId: 'stat-maitri' },
+    { id: 'item-food-02', name: 'Emergency protein bars', sku: 'SKU-FOOD-002', category: 'rations' as InventoryCategory, unit: 'units', onHandQuantity: 1200, reservedQuantity: 0, minThreshold: 500, targetStock: 1500, unitCost: 3.20, storageLocation: 'Emergency Locker A', stationId: 'stat-maitri' },
+    { id: 'item-med-01', name: 'First Aid Kit (Level 3)', sku: 'SKU-MED-001', category: 'medical' as InventoryCategory, unit: 'kits', onHandQuantity: 15, reservedQuantity: 0, minThreshold: 10, targetStock: 25, unitCost: 145.00, storageLocation: 'Med Bay Cabinet 2', stationId: 'stat-maitri' },
+    { id: 'item-med-02', name: 'Morphine injections', sku: 'SKU-MED-002', category: 'medical' as InventoryCategory, unit: 'vials', onHandQuantity: 30, reservedQuantity: 5, minThreshold: 40, targetStock: 80, unitCost: 22.00, storageLocation: 'Narcotics Safe', stationId: 'stat-dakshin' },
+    { id: 'item-spare-01', name: 'Generator spark plugs', sku: 'SKU-SPARE-001', category: 'spare_parts' as InventoryCategory, unit: 'units', onHandQuantity: 12, reservedQuantity: 0, minThreshold: 20, targetStock: 50, unitCost: 15.00, storageLocation: 'Workshop Shelf 3', stationId: 'stat-maitri' },
+    { id: 'item-gear-01', name: 'Extreme cold weather suits', sku: 'SKU-GEAR-001', category: 'safety_gear' as InventoryCategory, unit: 'suits', onHandQuantity: 42, reservedQuantity: 10, minThreshold: 30, targetStock: 60, unitCost: 380.00, storageLocation: 'Gear Room', stationId: 'stat-maitri' },
+    { id: 'item-sci-01', name: 'Ice core sample containers', sku: 'SKU-SCI-001', category: 'scientific_equipment' as InventoryCategory, unit: 'units', onHandQuantity: 120, reservedQuantity: 20, minThreshold: 80, targetStock: 200, unitCost: 45.00, storageLocation: 'Cold Lab', stationId: 'stat-bharati' },
+  ];
+
+  for (const item of itemsData) {
+    await prisma.inventoryItem.upsert({
+      where: { sku: item.sku },
+      create: item,
+      update: item,
+    });
+  }
+
+  // ── 5. 30-Day Inventory Consumption History (for Analytics/Forecasting) ──
+  console.log('Seeding Inventory Transactions...');
+  const txCount = await prisma.inventoryTransaction.count();
+  if (txCount === 0) {
+    const transactions = [];
+    for (let dayOffset = 30; dayOffset >= 1; dayOffset--) {
       const txDate = new Date();
       txDate.setDate(txDate.getDate() - dayOffset);
-      // Random daily consumption: 1-5 units
-      const qty = Math.floor(Math.random() * 5) + 1;
-      txRecords.push({
-        item: item._id,
-        type: 'consumption',
-        quantity: -qty,
-        reason: 'Daily station operations',
-        performedBy: adminUser._id,
+      const qty = Math.floor(Math.random() * 8) + 2;
+
+      transactions.push({
+        id: `tx-fuel-${dayOffset}`,
+        itemId: 'item-fuel-01',
+        stationId: 'stat-maitri',
+        type: 'consumption' as TransactionType,
+        quantity: qty,
+        balanceAfter: 8000 - dayOffset * 5,
+        referenceType: 'daily_ops',
+        notes: `Daily diesel consumption - day -${dayOffset}`,
+        performedBy: 'usr-admin-vasantha',
+        createdAt: txDate,
+      });
+
+      transactions.push({
+        id: `tx-rations-${dayOffset}`,
+        itemId: 'item-food-01',
+        stationId: 'stat-maitri',
+        type: 'consumption' as TransactionType,
+        quantity: 3,
+        balanceAfter: 350 - dayOffset * 2,
+        referenceType: 'daily_ops',
+        notes: `Ration distribution - day -${dayOffset}`,
+        performedBy: 'usr-inv-kavya',
         createdAt: txDate,
       });
     }
+
+    for (const tx of transactions) {
+      await prisma.inventoryTransaction.create({ data: tx });
+    }
   }
-  await InventoryTransaction.insertMany(txRecords);
-  console.log(`Created ${txRecords.length} inventory transactions (90-day history for top 5 items)`);
 
-  // ── Personnel ─────────────────────────────────────────────────────────
-  const personnel = await Personnel.insertMany([
-    { personnelId: 'PRS-2026-0001', name: 'Dr. Vikram Solankhi', role: 'Glaciologist', department: 'Scientific', email: 'v.solankhi@ncpor.example', assignedStation: stations[0]._id, linkedExpedition: expeditions[0]._id, currentStatus: 'on_assignment', isActive: true },
-    { personnelId: 'PRS-2026-0002', name: 'Eng. Deepa Thomas', role: 'Mechanical Engineer', department: 'Technical', email: 'd.thomas@ncpor.example', assignedStation: stations[0]._id, currentStatus: 'at_station', isActive: true },
-    { personnelId: 'PRS-2026-0003', name: 'Dr. Rahul Krishnan', role: 'Atmospheric Scientist', department: 'Scientific', email: 'r.krishnan@ncpor.example', assignedStation: stations[2]._id, linkedExpedition: expeditions[2]._id, currentStatus: 'preparing', isActive: true },
-    { personnelId: 'PRS-2026-0004', name: 'Tech. Sunita Patel', role: 'Communication Technician', department: 'Operations', email: 's.patel@ncpor.example', assignedStation: stations[1]._id, currentStatus: 'at_station', isActive: true },
-    { personnelId: 'PRS-2026-0005', name: 'Cdr. Harish Bhatt', role: 'Expedition Leader', department: 'Command', email: 'h.bhatt@ncpor.example', assignedStation: stations[0]._id, linkedExpedition: expeditions[0]._id, currentStatus: 'on_assignment', isActive: true },
-    { personnelId: 'PRS-2026-0006', name: 'Dr. Maya Iyer', role: 'Medical Officer', department: 'Medical', email: 'm.iyer@ncpor.example', assignedStation: stations[0]._id, currentStatus: 'at_station', isActive: true },
-    { personnelId: 'PRS-2026-0007', name: 'Tech. Anil Joshi', role: 'Snow Vehicle Operator', department: 'Logistics', email: 'a.joshi@ncpor.example', assignedStation: stations[2]._id, currentStatus: 'in_transit', isActive: true },
-    { personnelId: 'PRS-2026-0008', name: 'Dr. Preethi Rao', role: 'Oceanographer', department: 'Scientific', email: 'p.rao@ncpor.example', assignedStation: stations[2]._id, linkedExpedition: expeditions[2]._id, currentStatus: 'assigned', isActive: true },
-    { personnelId: 'PRS-2026-0009', name: 'Eng. Sanjay Dubey', role: 'Power Systems Engineer', department: 'Technical', email: 's.dubey@ncpor.example', assignedStation: stations[1]._id, currentStatus: 'at_station', isActive: true },
-    { personnelId: 'PRS-2026-0010', name: 'Lt. Aruna Pillai', role: 'Safety Officer', department: 'Operations', email: 'a.pillai@ncpor.example', assignedStation: stations[0]._id, currentStatus: 'at_station', isActive: true },
-    { personnelId: 'PRS-2026-0011', name: 'Dr. Nikhil Saxena', role: 'Geologist', department: 'Scientific', email: 'n.saxena@ncpor.example', assignedStation: stations[0]._id, linkedExpedition: expeditions[0]._id, currentStatus: 'on_assignment', isActive: true },
-    { personnelId: 'PRS-2026-0012', name: 'Tech. Fatima Sheikh', role: 'IT Systems Technician', department: 'Technical', email: 'f.sheikh@ncpor.example', assignedStation: stations[2]._id, currentStatus: 'returned', isActive: true },
-    { personnelId: 'PRS-2026-0013', name: 'Dr. Kiran Desai', role: 'Marine Biologist', department: 'Scientific', email: 'k.desai@ncpor.example', assignedStation: stations[0]._id, currentStatus: 'status_verification_required', isActive: true },
-    { personnelId: 'PRS-2026-0014', name: 'Cdr. Varun Menon', role: 'Navigation Officer', department: 'Operations', email: 'v.menon@ncpor.example', assignedStation: stations[1]._id, linkedExpedition: expeditions[1]._id, currentStatus: 'preparing', isActive: true },
-    { personnelId: 'PRS-2026-0015', name: 'Tech. Sneha Kulkarni', role: 'Meteorologist', department: 'Scientific', email: 's.kulkarni@ncpor.example', assignedStation: stations[0]._id, currentStatus: 'at_station', isActive: true },
-  ]);
-  console.log(`Created ${personnel.length} personnel`);
+  // ── 6. Shipments & Cargo ───────────────────────────────────────────────
+  console.log('Seeding Shipments...');
+  const shipmentsData = [
+    { id: 'shp-2026-0001', shipmentNumber: 'SHP-2026-0001', origin: 'Cape Town Port, South Africa', destinationId: 'stat-maitri', expeditionId: 'exp-2026-02', status: 'arrived' as ShipmentStatus, departureDate: new Date('2026-08-15'), estimatedArrival: new Date('2026-09-20'), actualArrival: new Date('2026-09-21'), trackingNumber: 'TRK-POLAR-9921', vesselName: 'SA Agulhas II' },
+    { id: 'shp-2026-0002', shipmentNumber: 'SHP-2026-0002', origin: 'Maitri Station', destinationId: 'stat-bharati', expeditionId: 'exp-2026-03', status: 'in_transit' as ShipmentStatus, departureDate: new Date('2026-09-10'), estimatedArrival: new Date('2026-10-05'), trackingNumber: 'TRK-POLAR-9922', vesselName: 'Polar Pioneer' },
+    { id: 'shp-2026-0003', shipmentNumber: 'SHP-2026-0003', origin: 'Goa Harbor, India', destinationId: 'stat-dakshin', expeditionId: 'exp-2026-02', status: 'delayed' as ShipmentStatus, departureDate: new Date('2026-08-01'), estimatedArrival: new Date('2026-09-15'), trackingNumber: 'TRK-POLAR-9923', vesselName: 'MV Vasiliy Golovnin', notes: 'Severe sea ice pack delayed transit by 14 days' },
+  ];
 
-  // ── Assets ────────────────────────────────────────────────────────────
-  const pastMaint = new Date(); pastMaint.setDate(pastMaint.getDate() - 30);
-  const nextMaint7 = new Date(); nextMaint7.setDate(nextMaint7.getDate() + 7);
-  const nextMaint30 = new Date(); nextMaint30.setDate(nextMaint30.getDate() + 30);
-  const nextMaintOverdue = new Date(); nextMaintOverdue.setDate(nextMaintOverdue.getDate() - 3);
+  for (const shp of shipmentsData) {
+    const s = await prisma.shipment.upsert({
+      where: { shipmentNumber: shp.shipmentNumber },
+      create: shp,
+      update: shp,
+    });
 
-  const assets = await Asset.insertMany([
-    { assetId: 'AST-2026-0001', name: 'Snow Crawler SC-7', category: 'Vehicle', assignedStation: stations[0]._id, condition: 'good', status: 'operational', acquisitionDate: new Date('2022-01-15'), maintenanceIntervalDays: 90, lastMaintenanceDate: pastMaint, nextMaintenanceDue: nextMaint7, usageHours: 1240, usageHoursThreshold: 1500 },
-    { assetId: 'AST-2026-0002', name: 'Emergency Generator G-3', category: 'Power System', assignedStation: stations[0]._id, condition: 'good', status: 'operational', acquisitionDate: new Date('2021-06-01'), maintenanceIntervalDays: 60, lastMaintenanceDate: pastMaint, nextMaintenanceDue: nextMaint30, usageHours: 3400, usageHoursThreshold: 5000 },
-    { assetId: 'AST-2026-0003', name: 'Satellite Comms Array INSAT-P', category: 'Communication', assignedStation: stations[0]._id, condition: 'fair', status: 'fault_reported', acquisitionDate: new Date('2020-03-20'), maintenanceIntervalDays: 180, lastMaintenanceDate: new Date('2026-03-20'), nextMaintenanceDue: new Date('2026-09-20'), usageHours: 0, usageHoursThreshold: 9999, notes: 'Signal intermittency reported on 2026-09-15' },
-    { assetId: 'AST-2026-0004', name: 'Ice Core Drill RIG-2', category: 'Scientific Equipment', assignedStation: stations[2]._id, condition: 'excellent', status: 'operational', acquisitionDate: new Date('2023-08-10'), maintenanceIntervalDays: 120, lastMaintenanceDate: new Date('2026-06-01'), nextMaintenanceDue: new Date('2026-10-01'), usageHours: 320, usageHoursThreshold: 1000 },
-    { assetId: 'AST-2026-0005', name: 'Zodiac Inflatable Boat Z-4', category: 'Marine Vessel', assignedStation: stations[2]._id, condition: 'good', status: 'under_maintenance', acquisitionDate: new Date('2024-02-14'), maintenanceIntervalDays: 365, lastMaintenanceDate: new Date('2025-02-14'), nextMaintenanceDue: new Date('2026-02-14'), usageHours: 80, usageHoursThreshold: 500 },
-    { assetId: 'AST-2026-0006', name: 'Weather Station AWS-12', category: 'Scientific Equipment', assignedStation: stations[1]._id, condition: 'good', status: 'operational', acquisitionDate: new Date('2022-11-01'), maintenanceIntervalDays: 180, lastMaintenanceDate: new Date('2026-03-01'), nextMaintenanceDue: nextMaint30, usageHours: 0, usageHoursThreshold: 9999 },
-    { assetId: 'AST-2026-0007', name: 'Solar Panel Array SP-6', category: 'Power System', assignedStation: stations[1]._id, condition: 'fair', status: 'fault_reported', acquisitionDate: new Date('2021-01-01'), maintenanceIntervalDays: 365, lastMaintenanceDate: new Date('2025-01-01'), nextMaintenanceDue: nextMaintOverdue, usageHours: 0, usageHoursThreshold: 9999, notes: 'Panel efficiency drop reported' },
-    { assetId: 'AST-2026-0008', name: 'Field Medical Unit FMU-2', category: 'Medical Equipment', assignedStation: stations[0]._id, condition: 'excellent', status: 'operational', acquisitionDate: new Date('2024-05-01'), maintenanceIntervalDays: 180, lastMaintenanceDate: new Date('2026-03-01'), nextMaintenanceDue: new Date('2026-09-01'), usageHours: 0, usageHoursThreshold: 9999 },
-    { assetId: 'AST-2026-0009', name: 'Snow Groomer SG-3', category: 'Vehicle', assignedStation: stations[0]._id, condition: 'good', status: 'operational', acquisitionDate: new Date('2023-07-01'), maintenanceIntervalDays: 90, lastMaintenanceDate: new Date('2026-07-01'), nextMaintenanceDue: new Date('2026-10-01'), usageHours: 890, usageHoursThreshold: 2000 },
-    { assetId: 'AST-2026-0010', name: 'Atmospheric LIDAR Unit', category: 'Scientific Equipment', assignedStation: stations[2]._id, condition: 'good', status: 'operational', acquisitionDate: new Date('2025-01-01'), maintenanceIntervalDays: 365, lastMaintenanceDate: new Date('2026-01-01'), nextMaintenanceDue: new Date('2027-01-01'), usageHours: 0, usageHoursThreshold: 9999 },
-    { assetId: 'AST-2026-0011', name: 'Emergency Inflatable Shelter S-2', category: 'Safety Equipment', assignedStation: stations[0]._id, condition: 'excellent', status: 'operational', acquisitionDate: new Date('2025-03-01'), maintenanceIntervalDays: 365, lastMaintenanceDate: new Date('2026-03-01'), nextMaintenanceDue: new Date('2027-03-01'), usageHours: 0, usageHoursThreshold: 9999 },
-    { assetId: 'AST-2026-0012', name: 'Ice Penetrating Radar IPR-1', category: 'Scientific Equipment', assignedStation: stations[2]._id, condition: 'poor', status: 'out_of_service', acquisitionDate: new Date('2019-06-01'), maintenanceIntervalDays: 180, lastMaintenanceDate: new Date('2025-06-01'), nextMaintenanceDue: new Date('2025-12-01'), usageHours: 2400, usageHoursThreshold: 2000, notes: 'Sent for depot repair' },
-  ]);
-  console.log(`Created ${assets.length} assets`);
+    // Seed Cargo Items
+    await prisma.cargoItem.createMany({
+      data: [
+        { shipmentId: s.id, description: 'Freeze-dried rations pallet', quantity: 500, unit: 'kg', weightKg: 550, hazardous: false, received: s.status === 'arrived' },
+        { shipmentId: s.id, description: 'Arctic diesel barrels', quantity: 2000, unit: 'liters', weightKg: 1700, hazardous: true, received: s.status === 'arrived' },
+      ],
+      skipDuplicates: true,
+    });
+  }
 
-  // ── Incidents ─────────────────────────────────────────────────────────
-  const incidents = await Incident.insertMany([
-    {
-      incidentId: 'INC-2026-0001',
-      type: 'equipment_failure',
-      description: 'Satellite comms array INSAT-P experiencing intermittent signal loss. Primary data uplink affected. Backup VHF operational.',
-      location: 'Maitri Station - Communications Hub',
-      station: stations[0]._id,
-      reportedTime: new Date(Date.now() - 20 * 60 * 1000), // 20 min ago = past SLA
-      severity: 'critical',
-      status: 'reported', // Unacknowledged critical → triggers SLA alert
-      requiredResources: ['Satellite uplink technician', 'Replacement LNB module'],
-      reportedBy: adminUser._id,
-    },
-    {
-      incidentId: 'INC-2026-0002',
-      type: 'weather',
-      description: 'Severe katabatic wind event (120 km/h) affecting outdoor operations at Bharati Station. All personnel recalled to shelter.',
-      location: 'Bharati Station - Exterior',
-      station: stations[2]._id,
-      reportedTime: new Date(Date.now() - 3 * 60 * 60 * 1000),
-      severity: 'high',
-      status: 'response_in_progress',
-      assignedCoordinator: users[5]._id,
-      responseActions: [{ action: 'All personnel recalled to main building', performedBy: 'Dr. Anita Sharma', timestamp: new Date(Date.now() - 2.5 * 60 * 60 * 1000) }],
-      reportedBy: users[5]._id,
-    },
-    {
-      incidentId: 'INC-2026-0003',
-      type: 'supply_shortage',
-      description: 'Medical supply shortage: morphine vials below minimum threshold. Resupply shipment delayed.',
-      location: 'Dakshin Gangotri Medical Bay',
-      station: stations[1]._id,
-      reportedTime: new Date(Date.now() - 24 * 60 * 60 * 1000),
-      severity: 'high',
-      status: 'acknowledged',
-      assignedCoordinator: users[5]._id,
-      reportedBy: users[3]._id,
-    },
-    {
-      incidentId: 'INC-2026-0004',
-      type: 'medical',
-      description: 'Team member reported frostbite on extremities during survey. Treated on-site. Condition stable.',
-      location: 'Field Survey Point 7, 12km NE of Maitri',
-      station: stations[0]._id,
-      reportedTime: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
-      severity: 'medium',
-      status: 'resolved',
-      resolutionNotes: 'Personnel treated and returned to station. Cleared for duty in 48h.',
-      reportedBy: users[1]._id,
-    },
-    {
-      incidentId: 'INC-2026-0005',
-      type: 'navigation',
-      description: 'Snow vehicle SC-7 got stuck in soft snow field during routine traverse. Recovery team dispatched.',
-      location: '8km SSW of Maitri Station',
-      station: stations[0]._id,
-      reportedTime: new Date(Date.now() - 4 * 60 * 60 * 1000),
-      severity: 'medium',
-      status: 'assessing',
-      assignedCoordinator: users[5]._id,
-      reportedBy: users[6]._id,
-    },
-    {
-      incidentId: 'INC-2026-0006',
-      type: 'communication_loss',
-      description: 'Periodic communication blackout with Dakshin Gangotri during peak polar night.',
-      location: 'Dakshin Gangotri',
-      station: stations[1]._id,
-      reportedTime: new Date(Date.now() - 48 * 60 * 60 * 1000),
-      severity: 'low',
-      status: 'closed',
-      resolutionNotes: 'Standard polar night interference. HF radio backup functional.',
-      reportedBy: users[3]._id,
-    },
-    {
-      incidentId: 'INC-2026-0007',
-      type: 'equipment_failure',
-      description: 'Solar panel array SP-6 at Dakshin Gangotri showing 35% efficiency drop. Heating element failure suspected.',
-      location: 'Dakshin Gangotri - Solar Field',
-      station: stations[1]._id,
-      reportedTime: new Date(Date.now() - 6 * 60 * 60 * 1000),
-      severity: 'high',
-      status: 'response_in_progress',
-      assignedCoordinator: users[5]._id,
-      reportedBy: users[3]._id,
-    },
-    {
-      incidentId: 'INC-2026-0008',
-      type: 'security',
-      description: 'Unauthorized proximity of research vessel to restricted environmental zone near Bharati Station.',
-      location: 'Offshore, 5km W of Bharati Station',
-      station: stations[2]._id,
-      reportedTime: new Date(Date.now() - 12 * 60 * 60 * 1000),
-      severity: 'low',
-      status: 'resolved',
-      resolutionNotes: 'Vessel identified and warned via radio. Departed the restricted zone.',
-      reportedBy: users[4]._id,
-    },
-  ]);
-  console.log(`Created ${incidents.length} incidents`);
+  // ── 7. Personnel ───────────────────────────────────────────────────────
+  console.log('Seeding Personnel...');
+  const personnelData = [
+    { id: 'prs-001', name: 'Dr. Vikram Solankhi', role: 'Glaciologist', medicalClearanceDate: new Date('2026-06-15'), clearanceStatus: 'valid' as ClearanceStatus, bloodGroup: 'O+', emergencyContact: '+91-9876543210', stationId: 'stat-maitri', currentStatus: 'at_station' as PersonnelStatus },
+    { id: 'prs-002', name: 'Eng. Deepa Thomas', role: 'Mechanical Engineer', medicalClearanceDate: new Date('2026-05-10'), clearanceStatus: 'valid' as ClearanceStatus, bloodGroup: 'A+', emergencyContact: '+91-9876543211', stationId: 'stat-maitri', currentStatus: 'at_station' as PersonnelStatus },
+    { id: 'prs-003', name: 'Dr. Rahul Krishnan', role: 'Atmospheric Scientist', medicalClearanceDate: new Date('2026-07-01'), clearanceStatus: 'valid' as ClearanceStatus, bloodGroup: 'B+', emergencyContact: '+91-9876543212', stationId: 'stat-bharati', currentStatus: 'on_assignment' as PersonnelStatus },
+    { id: 'prs-004', name: 'Tech. Sunita Patel', role: 'Communications Technician', medicalClearanceDate: new Date('2026-08-20'), clearanceStatus: 'valid' as ClearanceStatus, bloodGroup: 'AB+', emergencyContact: '+91-9876543213', stationId: 'stat-dakshin', currentStatus: 'at_station' as PersonnelStatus },
+    { id: 'prs-005', name: 'Cdr. Harish Bhatt', role: 'Expedition Leader', medicalClearanceDate: new Date('2026-04-12'), clearanceStatus: 'expiring_soon' as ClearanceStatus, bloodGroup: 'O-', emergencyContact: '+91-9876543214', stationId: 'stat-maitri', currentStatus: 'on_assignment' as PersonnelStatus },
+  ];
 
-  // ── Alerts (seed initial set) ─────────────────────────────────────────
-  await Alert.insertMany([
-    // Low stock alerts (from below-threshold items)
-    { type: 'low_stock', severity: 'warning', entityType: 'InventoryItem', entityId: inventoryItems[0]._id, reason: 'Freeze-dried rations on-hand (350 kg) below minimum (400 kg)', explanation: { rule: 'inventory_below_threshold', inputs: { onHand: 350, threshold: 400 } }, status: 'open', lastCheckedAt: now },
-    { type: 'low_stock', severity: 'warning', entityType: 'InventoryItem', entityId: inventoryItems[8]._id, reason: 'Morphine injections on-hand (30 vials) below minimum (40 vials)', explanation: { rule: 'inventory_below_threshold', inputs: { onHand: 30, threshold: 40 } }, status: 'open', lastCheckedAt: now },
-    { type: 'low_stock', severity: 'warning', entityType: 'InventoryItem', entityId: inventoryItems[11]._id, reason: 'Generator spark plugs on-hand (12 units) below minimum (20 units)', explanation: { rule: 'inventory_below_threshold', inputs: { onHand: 12, threshold: 20 } }, status: 'open', lastCheckedAt: now },
-    { type: 'low_stock', severity: 'warning', entityType: 'InventoryItem', entityId: inventoryItems[16]._id, reason: 'Satellite phone batteries on-hand (8 units) below minimum (12 units)', explanation: { rule: 'inventory_below_threshold', inputs: { onHand: 8, threshold: 12 } }, status: 'open', lastCheckedAt: now },
-    // Delayed shipments
-    { type: 'shipment_delayed', severity: 'warning', entityType: 'Shipment', entityId: shipments[2]._id, reason: 'Shipment SHP-2026-0003 is past estimated arrival', explanation: { rule: 'shipment_past_eta', inputs: { eta: d(-5), status: 'delayed' } }, status: 'open', lastCheckedAt: now },
-    { type: 'shipment_delayed', severity: 'warning', entityType: 'Shipment', entityId: shipments[5]._id, reason: 'Shipment SHP-2026-0006 is past estimated arrival', explanation: { rule: 'shipment_past_eta', inputs: { eta: d(-8), status: 'delayed' } }, status: 'open', lastCheckedAt: now },
-    // Maintenance due
-    { type: 'maintenance_due', severity: 'warning', entityType: 'Asset', entityId: assets[0]._id, reason: 'Snow Crawler SC-7 maintenance due in 7 days', explanation: { rule: 'maintenance_date_threshold', inputs: { nextDue: nextMaint7, daysUntil: 7 } }, status: 'open', lastCheckedAt: now },
-    { type: 'maintenance_due', severity: 'critical', entityType: 'Asset', entityId: assets[6]._id, reason: 'Solar Panel Array SP-6 maintenance overdue', explanation: { rule: 'maintenance_date_threshold', inputs: { nextDue: nextMaintOverdue, daysUntil: -3 } }, status: 'open', lastCheckedAt: now },
-    // Critical incident unacknowledged
-    { type: 'critical_incident_unacknowledged', severity: 'critical', entityType: 'Incident', entityId: incidents[0]._id, reason: 'Critical incident INC-2026-0001 has not been acknowledged within 15 minutes', explanation: { rule: 'critical_incident_sla', inputs: { slaMinutes: 15, reportedTime: incidents[0].reportedTime } }, status: 'open', lastCheckedAt: now },
-    // Cargo arrived but not received (SHP-2026-0001 arrived 2 days ago, not received)
-    { type: 'cargo_arrived_not_received', severity: 'warning', entityType: 'Shipment', entityId: shipments[0]._id, reason: 'Shipment SHP-2026-0001 arrived but has not been received after 24h', explanation: { rule: 'cargo_arrived_not_received', inputs: { arrivedAt: d(-2), windowHours: 24 } }, status: 'open', lastCheckedAt: now },
-  ]);
-  console.log('Created seed alerts');
+  for (const p of personnelData) {
+    await prisma.personnel.upsert({
+      where: { id: p.id },
+      create: p,
+      update: p,
+    });
+  }
 
-  console.log('\n✅ POLARIS database seeded successfully!');
-  console.log('\nDemo credentials (all passwords: Polaris@2026):');
-  console.log('  vasanthavishwa@polaris.com → System Administrator (Vasantha Vishwa)');
-  console.log('  coordinator@polaris.com    → Expedition Coordinator');
-  console.log('  logistics@polaris.com      → Logistics Officer');
-  console.log('  inventory@polaris.com      → Inventory Manager');
-  console.log('  personnel@polaris.com      → Personnel Coordinator');
-  console.log('  emergency@polaris.com      → Emergency Coordinator');
-  console.log('  ops@polaris.com            → Station Operations User');
+  // ── 8. Assets & Maintenance ────────────────────────────────────────────
+  console.log('Seeding Assets...');
+  const assetsData = [
+    { id: 'ast-001', assetTag: 'AST-SC-001', name: 'Snow Crawler SC-7', category: 'vehicle' as AssetCategory, status: 'operational' as AssetStatus, stationId: 'stat-maitri', hourMeter: 1240, nextServiceDue: 1500, criticalRating: 'high' as CriticalRating },
+    { id: 'ast-002', assetTag: 'AST-GEN-002', name: 'Emergency Generator G-3', category: 'generator' as AssetCategory, status: 'operational' as AssetStatus, stationId: 'stat-maitri', hourMeter: 3400, nextServiceDue: 3500, criticalRating: 'critical' as CriticalRating },
+    { id: 'ast-003', assetTag: 'AST-COM-003', name: 'Satellite Comms Array INSAT-P', category: 'communication' as AssetCategory, status: 'under_repair' as AssetStatus, stationId: 'stat-maitri', hourMeter: 4800, nextServiceDue: 4500, criticalRating: 'critical' as CriticalRating },
+    { id: 'ast-004', assetTag: 'AST-RIG-004', name: 'Ice Core Drill RIG-2', category: 'scientific_instrument' as AssetCategory, status: 'operational' as AssetStatus, stationId: 'stat-bharati', hourMeter: 320, nextServiceDue: 500, criticalRating: 'medium' as CriticalRating },
+  ];
 
-  await mongoose.disconnect();
+  for (const a of assetsData) {
+    await prisma.asset.upsert({
+      where: { assetTag: a.assetTag },
+      create: a,
+      update: a,
+    });
+
+    await prisma.maintenanceRecord.create({
+      data: {
+        assetId: a.id,
+        serviceType: 'routine',
+        hoursAtService: a.hourMeter - 100,
+        performedBy: 'usr-admin-vasantha',
+        notes: 'Periodic maintenance inspection complete',
+        cost: 350.00,
+        nextServiceDue: a.nextServiceDue,
+      },
+    }).catch(() => {});
+  }
+
+  // ── 9. Incidents ───────────────────────────────────────────────────────
+  console.log('Seeding Incidents...');
+  const incidentsData = [
+    {
+      id: 'inc-001',
+      incidentNumber: 'INC-2026-0001',
+      title: 'Satellite comms array INSAT-P signal loss',
+      severity: 'critical' as IncidentSeverity,
+      category: 'equipment_failure' as IncidentCategory,
+      status: 'open' as IncidentStatus,
+      stationId: 'stat-maitri',
+      expeditionId: 'exp-2026-01',
+      locationDescription: 'Maitri Communications Dome',
+      reportedBy: 'usr-admin-vasantha',
+    },
+    {
+      id: 'inc-002',
+      incidentNumber: 'INC-2026-0002',
+      title: 'Severe katabatic wind event (120 km/h)',
+      severity: 'moderate' as IncidentSeverity,
+      category: 'weather_damage' as IncidentCategory,
+      status: 'investigating' as IncidentStatus,
+      stationId: 'stat-bharati',
+      expeditionId: 'exp-2026-03',
+      locationDescription: 'Bharati Station East Ridge',
+      reportedBy: 'usr-emerg-anita',
+      acknowledgedAt: new Date(),
+      acknowledgedBy: 'usr-emerg-anita',
+    },
+  ];
+
+  for (const inc of incidentsData) {
+    await prisma.incident.upsert({
+      where: { incidentNumber: inc.incidentNumber },
+      create: inc,
+      update: inc,
+    });
+  }
+
+  // ── 10. Alerts ─────────────────────────────────────────────────────────
+  console.log('Seeding Alerts...');
+  const alertsData = [
+    { type: 'low_stock' as AlertType, severity: 'warning' as AlertSeverity, entityType: 'InventoryItem', entityId: 'item-food-01', reason: 'Freeze-dried rations on-hand (350 kg) below minimum threshold (400 kg)', status: 'open' as AlertStatus },
+    { type: 'low_stock' as AlertType, severity: 'warning' as AlertSeverity, entityType: 'InventoryItem', entityId: 'item-med-02', reason: 'Morphine injections on-hand (30 vials) below minimum (40 vials)', status: 'open' as AlertStatus },
+    { type: 'shipment_delayed' as AlertType, severity: 'warning' as AlertSeverity, entityType: 'Shipment', entityId: 'shp-2026-0003', reason: 'Shipment SHP-2026-0003 is past estimated arrival date', status: 'open' as AlertStatus },
+    { type: 'critical_incident_unacknowledged' as AlertType, severity: 'critical' as AlertSeverity, entityType: 'Incident', entityId: 'inc-001', reason: 'Critical incident INC-2026-0001 reported and unacknowledged', status: 'open' as AlertStatus },
+    { type: 'maintenance_due' as AlertType, severity: 'critical' as AlertSeverity, entityType: 'Asset', entityId: 'ast-003', reason: 'Satellite Comms Array INSAT-P is overdue for scheduled maintenance', status: 'open' as AlertStatus },
+  ];
+
+  for (const alt of alertsData) {
+    await prisma.alert.upsert({
+      where: { unique_open_alert: { type: alt.type, entityId: alt.entityId, status: alt.status } },
+      create: alt,
+      update: { lastCheckedAt: new Date() },
+    });
+  }
+
+  console.log('✅ TiDB Cloud database seeded successfully with complete POLARIS dataset!');
 }
 
-seed().catch((err) => {
-  console.error('Seed failed:', err);
-  process.exit(1);
-});
+seed()
+  .catch((e) => {
+    console.error('Seed error:', e);
+    process.exit(1);
+  })
+  .finally(() => prisma.$disconnect());
