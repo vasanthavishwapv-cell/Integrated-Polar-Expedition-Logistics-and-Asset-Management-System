@@ -242,10 +242,10 @@ ON DUPLICATE KEY UPDATE name=VALUES(name);
 
 -- Default password is 'Polaris@2026' (bcrypt hash)
 INSERT INTO users (id, name, email, password, role, station_id, is_active) VALUES
-  ('usr-admin-vasantha', 'Vasantha Vishwa', 'vasanthavishwa@polaris.com', '$2a$12$Zp4eMtz4b360zB.9gOaQ8X7d3Oze5kI2jT9fN3uFm0sP5zL4xY3vW', 'admin', 'stat-maitri', TRUE),
-  ('usr-coord-arjun', 'Capt. Arjun Mehta', 'coordinator@polaris.com', '$2a$12$Zp4eMtz4b360zB.9gOaQ8X7d3Oze5kI2jT9fN3uFm0sP5zL4xY3vW', 'expedition_coordinator', 'stat-maitri', TRUE),
-  ('usr-logistics-priya', 'Lt. Priya Nair', 'logistics@polaris.com', '$2a$12$Zp4eMtz4b360zB.9gOaQ8X7d3Oze5kI2jT9fN3uFm0sP5zL4xY3vW', 'logistics_officer', 'stat-maitri', TRUE),
-  ('usr-inv-kavya', 'Dr. Kavya Reddy', 'inventory@polaris.com', '$2a$12$Zp4eMtz4b360zB.9gOaQ8X7d3Oze5kI2jT9fN3uFm0sP5zL4xY3vW', 'inventory_manager', 'stat-dakshin', TRUE),
-  ('usr-emerg-anita', 'Dr. Anita Sharma', 'emergency@polaris.com', '$2a$12$Zp4eMtz4b360zB.9gOaQ8X7d3Oze5kI2jT9fN3uFm0sP5zL4xY3vW', 'emergency_coordinator', 'stat-maitri', TRUE),
-  ('usr-ops-rajan', 'Tech. Rajan Pillai', 'ops@polaris.com', '$2a$12$Zp4eMtz4b360zB.9gOaQ8X7d3Oze5kI2jT9fN3uFm0sP5zL4xY3vW', 'station_ops', 'stat-maitri', TRUE)
+  ('usr-admin-vasantha', 'Vasantha Vishwa', 'vasanthavishwa@polaris.com', '$2a$10$xmjufvMHtHa4EP8vRqvhh.HazpLn.mTVkzy1JA8D9SntCk/jiGRU6', 'admin', 'stat-maitri', TRUE),
+  ('usr-coord-arjun', 'Capt. Arjun Mehta', 'coordinator@polaris.com', '$2a$10$xmjufvMHtHa4EP8vRqvhh.HazpLn.mTVkzy1JA8D9SntCk/jiGRU6', 'expedition_coordinator', 'stat-maitri', TRUE),
+  ('usr-logistics-priya', 'Lt. Priya Nair', 'logistics@polaris.com', '$2a$10$xmjufvMHtHa4EP8vRqvhh.HazpLn.mTVkzy1JA8D9SntCk/jiGRU6', 'logistics_officer', 'stat-maitri', TRUE),
+  ('usr-inv-kavya', 'Dr. Kavya Reddy', 'inventory@polaris.com', '$2a$10$xmjufvMHtHa4EP8vRqvhh.HazpLn.mTVkzy1JA8D9SntCk/jiGRU6', 'inventory_manager', 'stat-dakshin', TRUE),
+  ('usr-emerg-anita', 'Dr. Anita Sharma', 'emergency@polaris.com', '$2a$10$xmjufvMHtHa4EP8vRqvhh.HazpLn.mTVkzy1JA8D9SntCk/jiGRU6', 'emergency_coordinator', 'stat-maitri', TRUE),
+  ('usr-ops-rajan', 'Tech. Rajan Pillai', 'ops@polaris.com', '$2a$10$xmjufvMHtHa4EP8vRqvhh.HazpLn.mTVkzy1JA8D9SntCk/jiGRU6', 'station_ops', 'stat-maitri', TRUE)
 ON DUPLICATE KEY UPDATE email=VALUES(email);
