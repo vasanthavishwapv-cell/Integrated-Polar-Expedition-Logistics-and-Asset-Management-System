@@ -14,7 +14,7 @@ import StatusBadge from '../components/ui/StatusBadge';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import ErrorAlert from '../components/ui/ErrorAlert';
 
-const CHART_COLORS = ['#48CAE4', '#90E0EF', '#22C55E', '#F59E0B', '#EF4444', '#A78BFA', '#34D399'];
+const CHART_COLORS = ['#1C2B3C', '#4B5C6C', '#676A70', '#C6C7BD', '#0284C7', '#10B981', '#F59E0B'];
 
 interface KPIs {
   totalExpeditions: number;
@@ -44,10 +44,12 @@ interface Analytics {
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload?.length) {
     return (
-      <div className="glass-card p-3 text-xs border border-accent-primary/20">
-        <p className="text-text-muted mb-1">{label}</p>
+      <div className="bg-white p-3 text-xs border border-[#C6C7BD] rounded-lg shadow-lg">
+        <p className="text-[#676A70] font-medium mb-1">{label}</p>
         {payload.map((p: any, i: number) => (
-          <p key={i} style={{ color: p.color }}>{p.name}: <strong>{p.value}</strong></p>
+          <p key={i} style={{ color: p.color }} className="font-medium">
+            {p.name}: <strong className="text-[#1C2B3C]">{p.value}</strong>
+          </p>
         ))}
       </div>
     );
@@ -139,8 +141,8 @@ export default function DashboardPage() {
           <h2 className="section-header"><Package className="w-4 h-4 text-accent-primary" /> Shipment Status</h2>
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={shipmentBarData} layout="vertical" margin={{ left: 8 }}>
-              <XAxis type="number" tick={{ fontSize: 10, fill: '#94A3B8' }} />
-              <YAxis type="category" dataKey="status" tick={{ fontSize: 9, fill: '#94A3B8' }} width={70} />
+              <XAxis type="number" tick={{ fontSize: 10, fill: '#676A70' }} />
+              <YAxis type="category" dataKey="status" tick={{ fontSize: 9, fill: '#676A70' }} width={70} />
               <Tooltip content={<CustomTooltip />} />
               <Bar dataKey="count" radius={[0, 4, 4, 0]}>
                 {shipmentBarData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
@@ -159,7 +161,7 @@ export default function DashboardPage() {
               <PieChart>
                 <Pie data={incidentPieData} cx="50%" cy="50%" innerRadius={50} outerRadius={75} paddingAngle={2} dataKey="value">
                   {incidentPieData.map((d, i) => (
-                    <Cell key={i} fill={d.name === 'critical' ? '#EF4444' : d.name === 'high' ? '#F97316' : d.name === 'medium' ? '#F59E0B' : '#3B82F6'} />
+                    <Cell key={i} fill={d.name === 'critical' ? '#DC2626' : d.name === 'high' ? '#EA580C' : d.name === 'medium' ? '#D97706' : '#2563EB'} />
                   ))}
                 </Pie>
                 <Tooltip content={<CustomTooltip />} />
@@ -179,11 +181,11 @@ export default function DashboardPage() {
           ) : (
             <ResponsiveContainer width="100%" height={180}>
               <LineChart data={consumptionData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.1)" />
-                <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#94A3B8' }} />
-                <YAxis tick={{ fontSize: 10, fill: '#94A3B8' }} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#EBEFF0" />
+                <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#676A70' }} />
+                <YAxis tick={{ fontSize: 10, fill: '#676A70' }} />
                 <Tooltip content={<CustomTooltip />} />
-                <Line type="monotone" dataKey="consumption" stroke="#48CAE4" strokeWidth={2} dot={false} name="Units consumed" />
+                <Line type="monotone" dataKey="consumption" stroke="#1C2B3C" strokeWidth={2.5} dot={{ fill: '#1C2B3C', r: 3 }} name="Units consumed" />
               </LineChart>
             </ResponsiveContainer>
           )}
@@ -194,11 +196,11 @@ export default function DashboardPage() {
           <h2 className="section-header"><Archive className="w-4 h-4 text-accent-primary" /> Stock by Category</h2>
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={inventoryBarData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.1)" />
-              <XAxis dataKey="category" tick={{ fontSize: 8, fill: '#94A3B8' }} angle={-30} textAnchor="end" height={40} />
-              <YAxis tick={{ fontSize: 10, fill: '#94A3B8' }} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#EBEFF0" />
+              <XAxis dataKey="category" tick={{ fontSize: 8, fill: '#676A70' }} angle={-30} textAnchor="end" height={40} />
+              <YAxis tick={{ fontSize: 10, fill: '#676A70' }} />
               <Tooltip content={<CustomTooltip />} />
-              <Bar dataKey="onHand" fill="#48CAE4" radius={[4, 4, 0, 0]} name="On-hand" />
+              <Bar dataKey="onHand" fill="#4B5C6C" radius={[4, 4, 0, 0]} name="On-hand" />
             </BarChart>
           </ResponsiveContainer>
         </div>

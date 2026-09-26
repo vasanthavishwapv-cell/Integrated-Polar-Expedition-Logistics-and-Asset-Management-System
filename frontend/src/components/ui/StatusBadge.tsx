@@ -5,49 +5,67 @@ interface StatusBadgeProps {
 
 const STATUS_COLORS: Record<string, string> = {
   // Expedition
-  draft: 'bg-slate-500/20 text-slate-400',
-  planned: 'bg-blue-500/20 text-blue-400',
-  active: 'bg-status-success/20 text-status-success',
-  completed: 'bg-accent-primary/20 text-accent-primary',
-  cancelled: 'bg-status-danger/20 text-status-danger',
+  draft: 'bg-[#EBEFF0] text-[#4B5C6C] border border-[#C6C7BD]',
+  planned: 'bg-sky-50 text-sky-800 border border-sky-200',
+  active: 'bg-emerald-50 text-emerald-800 border border-emerald-200',
+  completed: 'bg-[#EBEFF0] text-[#1C2B3C] border border-[#C6C7BD]',
+  cancelled: 'bg-red-50 text-red-700 border border-red-200',
+
   // Shipment
-  created: 'bg-slate-500/20 text-slate-400',
-  prepared: 'bg-blue-500/20 text-blue-400',
-  dispatched: 'bg-purple-500/20 text-purple-400',
-  in_transit: 'bg-amber-500/20 text-amber-400',
-  delayed: 'bg-status-danger/20 text-status-danger',
-  arrived: 'bg-teal-500/20 text-teal-400',
-  received: 'bg-status-success/20 text-status-success',
+  manifest_created: 'bg-[#EBEFF0] text-[#4B5C6C] border border-[#C6C7BD]',
+  created: 'bg-[#EBEFF0] text-[#4B5C6C] border border-[#C6C7BD]',
+  prepared: 'bg-sky-50 text-sky-800 border border-sky-200',
+  dispatched: 'bg-indigo-50 text-indigo-800 border border-indigo-200',
+  in_transit: 'bg-amber-50 text-amber-800 border border-amber-200',
+  delayed: 'bg-red-50 text-red-700 border border-red-200',
+  arrived: 'bg-teal-50 text-teal-800 border border-teal-200',
+  received: 'bg-emerald-50 text-emerald-800 border border-emerald-200',
+
   // Alert/Severity
-  open: 'bg-status-danger/20 text-status-danger',
-  acknowledged: 'bg-status-warning/20 text-status-warning',
-  resolved: 'bg-status-success/20 text-status-success',
-  closed: 'bg-slate-500/20 text-slate-400',
-  low: 'bg-blue-500/20 text-blue-400',
-  medium: 'bg-status-warning/20 text-status-warning',
-  high: 'bg-orange-500/20 text-orange-400',
-  critical: 'bg-status-danger/20 text-status-danger animate-pulse',
+  open: 'bg-red-50 text-red-700 border border-red-200',
+  acknowledged: 'bg-amber-50 text-amber-800 border border-amber-200',
+  resolved: 'bg-emerald-50 text-emerald-800 border border-emerald-200',
+  closed: 'bg-[#EBEFF0] text-[#676A70] border border-[#C6C7BD]',
+  info: 'bg-sky-50 text-sky-800 border border-sky-200',
+  warning: 'bg-amber-50 text-amber-800 border border-amber-200',
+  low: 'bg-sky-50 text-sky-800 border border-sky-200',
+  medium: 'bg-amber-50 text-amber-800 border border-amber-200',
+  moderate: 'bg-amber-50 text-amber-800 border border-amber-200',
+  high: 'bg-orange-50 text-orange-800 border border-orange-200',
+  severe: 'bg-orange-50 text-orange-800 border border-orange-200',
+  critical: 'bg-red-100 text-red-900 border border-red-300 font-bold',
+
   // Asset
-  operational: 'bg-status-success/20 text-status-success',
-  under_maintenance: 'bg-blue-500/20 text-blue-400',
-  fault_reported: 'bg-status-warning/20 text-status-warning',
-  out_of_service: 'bg-status-danger/20 text-status-danger',
-  retired: 'bg-slate-500/20 text-slate-400',
+  operational: 'bg-emerald-50 text-emerald-800 border border-emerald-200',
+  maintenance_due: 'bg-amber-50 text-amber-800 border border-amber-200',
+  under_maintenance: 'bg-sky-50 text-sky-800 border border-sky-200',
+  under_repair: 'bg-amber-50 text-amber-800 border border-amber-200',
+  fault_reported: 'bg-red-50 text-red-700 border border-red-200',
+  out_of_service: 'bg-red-50 text-red-700 border border-red-200',
+  decommissioned: 'bg-[#EBEFF0] text-[#676A70] border border-[#C6C7BD]',
+  retired: 'bg-[#EBEFF0] text-[#676A70] border border-[#C6C7BD]',
+
   // Personnel
-  assigned: 'bg-blue-500/20 text-blue-400',
-  preparing: 'bg-purple-500/20 text-purple-400',
-  at_station: 'bg-status-success/20 text-status-success',
-  on_assignment: 'bg-teal-500/20 text-teal-400',
-  returned: 'bg-slate-500/20 text-slate-400',
-  status_verification_required: 'bg-status-warning/20 text-status-warning',
+  valid: 'bg-emerald-50 text-emerald-800 border border-emerald-200',
+  expiring_soon: 'bg-amber-50 text-amber-800 border border-amber-200',
+  expired: 'bg-red-50 text-red-700 border border-red-200',
+  assigned: 'bg-sky-50 text-sky-800 border border-sky-200',
+  preparing: 'bg-indigo-50 text-indigo-800 border border-indigo-200',
+  at_station: 'bg-emerald-50 text-emerald-800 border border-emerald-200',
+  on_assignment: 'bg-teal-50 text-teal-800 border border-teal-200',
+  returned: 'bg-[#EBEFF0] text-[#676A70] border border-[#C6C7BD]',
+  status_verification_required: 'bg-amber-50 text-amber-800 border border-amber-200',
+
   // Incident
-  reported: 'bg-status-danger/20 text-status-danger',
-  assessing: 'bg-purple-500/20 text-purple-400',
-  response_in_progress: 'bg-status-warning/20 text-status-warning',
+  reported: 'bg-red-50 text-red-700 border border-red-200',
+  investigating: 'bg-amber-50 text-amber-800 border border-amber-200',
+  mitigated: 'bg-sky-50 text-sky-800 border border-sky-200',
+  assessing: 'bg-indigo-50 text-indigo-800 border border-indigo-200',
+  response_in_progress: 'bg-amber-50 text-amber-800 border border-amber-200',
 };
 
 export default function StatusBadge({ status, size = 'sm' }: StatusBadgeProps) {
-  const colors = STATUS_COLORS[status] || 'bg-slate-500/20 text-slate-400';
+  const colors = STATUS_COLORS[status] || 'bg-[#EBEFF0] text-[#4B5C6C] border border-[#C6C7BD]';
   const label = status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
   return (
     <span className={`status-badge ${colors} ${size === 'md' ? 'px-3 py-1 text-sm' : ''}`}>

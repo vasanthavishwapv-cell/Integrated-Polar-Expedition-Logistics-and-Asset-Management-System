@@ -33,25 +33,25 @@ export default function Sidebar() {
 
   return (
     <aside
-      className={`flex flex-col bg-bg-secondary border-r border-[rgba(148,163,184,0.1)] transition-all duration-300 ${
+      className={`flex flex-col bg-bg-secondary border-r border-[#C6C7BD]/50 transition-all duration-300 relative ${
         collapsed ? 'w-16' : 'w-60'
       }`}
     >
       {/* Logo */}
-      <div className={`flex items-center gap-3 p-4 border-b border-[rgba(148,163,184,0.1)] ${collapsed ? 'justify-center' : ''}`}>
-        <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-accent-primary/20 flex items-center justify-center">
-          <Radio className="w-4 h-4 text-accent-primary" />
+      <div className={`flex items-center gap-3 p-4 border-b border-[#C6C7BD]/50 ${collapsed ? 'justify-center' : ''}`}>
+        <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-[#1C2B3C] flex items-center justify-center text-white shadow-sm">
+          <Radio className="w-4 h-4 text-white" />
         </div>
         {!collapsed && (
           <div>
-            <div className="font-bold text-sm text-gradient leading-none">POLARIS</div>
-            <div className="text-[10px] text-text-muted leading-none mt-0.5">Polar Logistics System</div>
+            <div className="font-bold text-sm text-[#1C2B3C] tracking-wide leading-none">POLARIS</div>
+            <div className="text-[10px] text-text-muted leading-none mt-1 font-medium">Polar Operations</div>
           </div>
         )}
       </div>
 
       {/* Nav links */}
-      <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
+      <nav className="flex-1 py-4 px-2.5 space-y-1 overflow-y-auto">
         {NAV_ITEMS.map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}
@@ -68,7 +68,7 @@ export default function Sidebar() {
       </nav>
 
       {/* Bottom */}
-      <div className="p-2 border-t border-[rgba(148,163,184,0.1)] space-y-1">
+      <div className="p-2.5 border-t border-[#C6C7BD]/50 space-y-1">
         <NavLink
           to="/settings"
           className={({ isActive }) => `nav-link ${isActive ? 'active' : ''} ${collapsed ? 'justify-center px-2' : ''}`}
@@ -79,7 +79,7 @@ export default function Sidebar() {
         </NavLink>
         <button
           onClick={handleLogout}
-          className={`nav-link w-full text-status-danger hover:bg-red-500/10 ${collapsed ? 'justify-center px-2' : ''}`}
+          className={`nav-link w-full text-status-danger hover:bg-red-50 hover:text-red-700 ${collapsed ? 'justify-center px-2' : ''}`}
           title={collapsed ? 'Logout' : undefined}
         >
           <LogOut className="w-4 h-4 flex-shrink-0" />
@@ -90,8 +90,7 @@ export default function Sidebar() {
       {/* Collapse toggle */}
       <button
         onClick={() => setCollapsed(!collapsed)}
-        className="absolute bottom-32 -right-3 w-6 h-6 rounded-full bg-bg-secondary border border-[rgba(148,163,184,0.2)] flex items-center justify-center text-text-muted hover:text-accent-primary transition-colors"
-        style={{ position: 'absolute' }}
+        className="absolute bottom-28 -right-3 w-6 h-6 rounded-full bg-white border border-[#C6C7BD] shadow-sm flex items-center justify-center text-[#4B5C6C] hover:text-[#1C2B3C] hover:border-[#1C2B3C] transition-all z-10"
         aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
       >
         {collapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronLeft className="w-3 h-3" />}
